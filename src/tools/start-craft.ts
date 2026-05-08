@@ -72,7 +72,7 @@ export function registerStartCraft(server: McpServer) {
               "What's the overall tone — professional and calm, playful, data-dense, editorial?",
               "Any existing brand constraint — colors, fonts, a reference URL? (or skip)",
             ],
-            hint: `Ask these questions using the host input tool (one at a time), then call continue_craft({ state, action: { type: 'answer_project_questions', answers: [...] } })${brandNote}${componentsNote}`,
+            hint: `These are seed questions to establish project context. Ask them one at a time. For each, propose your own recommended answer before waiting — e.g. "Who is the primary user? (I'd assume developers based on the goal — confirm or redirect)". If any question can be answered by reading project files (package.json, README, existing code), read them instead of asking. Once context is established, call continue_craft({ state, action: { type: 'answer_project_questions', answers: [...] } }) with a concise summary of what was established.${brandNote}${componentsNote}`,
           }),
         }],
       }

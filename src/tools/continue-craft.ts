@@ -74,7 +74,7 @@ export async function advance(state: CraftWorkflowState, action: z.infer<typeof 
       return {
         state: next,
         questions: blockQuestions(currentBlock),
-        hint: `Ask these questions using the host input tool (one at a time), then call continue_craft({ state, action: { type: "answer_block_questions", answers: [...] } })`,
+        hint: `These are seed questions for the ${currentBlock} block. Ask them one at a time using the host input tool. For each question, propose your own recommended answer before waiting — e.g. "What's the primary action? (I'd suggest 'Start free trial' based on the goal — confirm or redirect)". If the answer opens a new branch, ask one follow-up before moving on. If any question can be answered by reading project files, read them instead. When you have enough to proceed, call continue_craft({ state, action: { type: "answer_block_questions", answers: [...] } }) with a concise summary of what was established.`,
       }
     }
 
@@ -89,7 +89,7 @@ export async function advance(state: CraftWorkflowState, action: z.infer<typeof 
         return {
           state: next,
           directions,
-          hint: `Present these 3 directions to the user by feel, not by technical spec. Wait for their choice, then call continue_craft({ state, action: { type: "choose_direction", direction_id: "..." } })`,
+          hint: `Present these directions to the user by feel — describe the mood, not the tech stack. Before asking them to choose, state which direction you'd recommend based on the brief and why (one sentence). Then ask: "Does that feel right, or do you want something different?" Once they confirm or redirect, call continue_craft({ state, action: { type: "choose_direction", direction_id: "..." } })`,
         }
       }
 
@@ -144,7 +144,7 @@ export async function advance(state: CraftWorkflowState, action: z.infer<typeof 
       return {
         state: next,
         questions: ["Anything else to clarify before we design?"],
-        hint: `Ask the follow-up question, then call continue_craft with answer_block_questions or request_design based on the user's response.`,
+        hint: `Ask the follow-up question. Propose your own recommended answer before waiting. If the user's response settles the ambiguity, call continue_craft with request_design. If it opens another branch, ask one more follow-up. Do not loop more than twice — if still unclear, make a reasonable assumption, state it, and proceed with request_design.`,
       }
     }
 
