@@ -88,8 +88,12 @@ export async function advance(state: CraftWorkflowState, action: z.infer<typeof 
       }
       return {
         state: next,
-        questions: blockQuestions(currentBlock),
-        hint: `These are seed questions for the ${currentBlock} block. Ask them one at a time using the host input tool. For each question, propose your own recommended answer before waiting — e.g. "What's the primary action? (I'd suggest 'Start free trial' based on the goal — confirm or redirect)". If the answer opens a new branch, ask one follow-up before moving on. If any question can be answered by reading project files, read them instead. When you have enough to proceed, call continue_craft({ state, action: { type: "answer_block_questions", answers: [...] } }) with a concise summary of what was established.`,
+        hint: [
+          `Read any relevant project files (existing components, data models, API types, route files) to understand what "${currentBlock}" needs to handle in the context of "${state.goal}".`,
+          `Then ask 2–3 questions specific to this block — not generic. Good questions establish: what data or actions this block shows or collects; the user's primary goal in this view; any edge cases or states (empty, error, loading) that matter here.`,
+          `Ask one at a time using the host input tool. Propose your recommendation before each. If an answer opens a branch, ask one follow-up.`,
+          `When you have enough to define the block, call continue_craft({ state, action: { type: "answer_block_questions", answers: [primary_action_or_purpose, data_or_content_summary, edge_cases_or_notes] } }).`,
+        ].join(" "),
       }
     }
 
@@ -293,25 +297,6 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
-function blockQuestions(block: string): string[] {
-  const map: Record<string, string[]> = {
-    "hero-section": [
-      "What's the single action the hero needs to drive?",
-      "Is the product established or pre-launch?",
-      "One headline idea, or should I propose options?",
-    ],
-    "navigation": [
-      "Global navigation to other pages, or in-page anchor links?",
-      "Should the nav include a CTA button, or just links?",
-    ],
-    "pricing-row": [
-      "How many tiers? (2–3 recommended)",
-      "Which tier should be highlighted as recommended?",
-      "Monthly pricing, annual, or both with a toggle?",
-    ],
-  }
-  return map[block] ?? ["Describe what this block needs to do."]
-}
 
 function buildPreview(block: string, primaryAction: string, directionName: string): string {
   const previews: Record<string, (action: string, dir: string) => string> = {

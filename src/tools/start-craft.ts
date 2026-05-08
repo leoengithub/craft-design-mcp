@@ -42,8 +42,12 @@ export function registerStartCraft(server: McpServer) {
             type: "text",
             text: JSON.stringify({
               state,
-              questions: blockQuestions(currentBlock?.block ?? ""),
-              hint: `Resuming. Ask these questions for the ${currentBlock?.block} block using the host input tool (one at a time), then call continue_craft({ state, action: { type: "answer_block_questions", answers: [...] } })`,
+              hint: [
+                `Resuming. Read any relevant project files to understand what "${currentBlock?.block}" needs in the context of "${goal}".`,
+                `Ask 2–3 focused questions specific to this block — what data or actions it handles, the user's primary goal here, any edge cases.`,
+                `Ask one at a time using the host input tool, propose your recommendation first.`,
+                `Then call continue_craft({ state, action: { type: "answer_block_questions", answers: [...] } }).`,
+              ].join(" "),
             }),
           }],
         }
@@ -59,19 +63,11 @@ export function registerStartCraft(server: McpServer) {
         custom_design_system: customSystem,
       }
 
-      const brandNote = customSystem ? " Your craft-ds.md was found and loaded as a custom direction option." : ""
-      const componentsNote = existingComponents?.length ? ` ${existingComponents.length} existing components found in COMPONENTS.md — the agent will reuse them.` : ""
+      const brandNote = customSystem ? " craft-ds.md was loaded — 'Your Brand' will appear as a direction option." : ""
+      const componentsNote = existingComponents?.length ? ` ${existingComponents.length} existing components found in COMPONENTS.md — reuse them instead of rebuilding.` : ""
       const hasKnownBlocks = state.block_plan.length > 0
-
-      const questions = [
-        "Who is the primary user — developers, designers, or managers?",
-        "What's the overall tone — professional and calm, playful, data-dense, editorial?",
-        "Any existing brand constraint — colors, fonts, a reference URL? (or skip)",
-        ...(!hasKnownBlocks ? ["What are the main screens or components you need to design? (list them, e.g. 'user list, rule editor, settings page')"] : []),
-      ]
-
-      const blocksNote = !hasKnownBlocks
-        ? ` The goal didn't match a known block pattern — the 4th question establishes the block plan. Include all 4 answers when calling answer_project_questions: [audience, tone, brand, screens].`
+      const screensInstruction = !hasKnownBlocks
+        ? ` Also determine the main screens or components to design (e.g. "rule editor, user list, empty state") and include them as the last answer — they will become the block plan.`
         : ""
 
       return {
@@ -79,8 +75,14 @@ export function registerStartCraft(server: McpServer) {
           type: "text",
           text: JSON.stringify({
             state,
-            questions,
-            hint: `These are seed questions to establish project context. Ask them one at a time using the host input tool. For each, propose your own recommended answer before waiting — e.g. "Who is the primary user? (I'd assume developers based on the goal — confirm or redirect)". If any question can be answered by reading project files (package.json, README, existing code), read them instead of asking. Once context is established, call continue_craft({ state, action: { type: 'answer_project_questions', answers: [...] } }) with a concise summary of what was established.${brandNote}${componentsNote}${blocksNote}`,
+            hint: [
+              `Read project files first (package.json, README, existing code, tailwind.config, src/) to understand the tech stack and constraints — answer any questions you can from those instead of asking.`,
+              `Then ask 2–3 focused questions specific to designing: "${goal}".`,
+              `Good questions for this phase establish: who uses this and what's their job-to-be-done in this flow; what a successful interaction looks like (primary action / outcome); any hard constraints from the existing system or data model.`,
+              `Do NOT ask generic questions like "who is the audience" or "what's the tone" — derive those from the goal and codebase. Only ask what you genuinely can't infer.`,
+              `Ask one at a time using the host input tool. Propose your own recommendation before waiting.`,
+              `Once context is established, call continue_craft({ state, action: { type: 'answer_project_questions', answers: [context_summary, primary_success_criteria, constraints_or_tone${!hasKnownBlocks ? ", screens_list" : ""}] } }).${screensInstruction}${brandNote}${componentsNote}`,
+            ].join(" "),
           }),
         }],
       }
@@ -112,26 +114,6 @@ export function inferBlockPlan(goal: string) {
   return []
 }
 
-function blockQuestions(block: string): string[] {
-  const map: Record<string, string[]> = {
-    "hero-section":         ["What's the single action the hero needs to drive?", "Is the product established or pre-launch?", "One headline idea, or should I propose options?"],
-    "navigation":           ["Global navigation to pages, or in-page anchor links?", "Should the nav include a CTA button, or just links?"],
-    "pricing-row":          ["How many tiers? (2–3 recommended)", "Which tier should be highlighted as recommended?", "Monthly pricing, annual, or both with a toggle?"],
-    "feature-highlights":   ["How many features to highlight? (3–6)", "What's the primary benefit theme — speed, collaboration, reliability?"],
-    "footer":               ["Which link groups does the footer need? (e.g. Product, Company, Legal)", "Should the footer include social icons or a newsletter field?"],
-    "data-table":           ["What are the column names?", "Does the table need sorting, filtering, or row selection?"],
-    "kpi-summary":          ["Which metrics to show? (3–6)", "Should each metric show a delta vs last period?"],
-    "onboarding-step":      ["Which step number is this, and what is the total?", "Is this an input form or an option-card choice?"],
-    "form":                 ["What fields does this form need?", "What is the submit action? (e.g. 'Create account', 'Save settings')"],
-    "card-grid":            ["What type of items are in the cards? (blog posts, team members, case studies...)", "How many columns? (2–4)"],
-    "modal":                ["What action or content does this modal contain?", "What is the primary button label?"],
-    "sidebar":              ["What are the top-level navigation sections?", "Does the sidebar need a nested section?"],
-    "empty-state":          ["What context is empty? (empty inbox, no projects, no results...)", "What is the primary CTA to fill this space?"],
-    "mobile-screen-header": ["What is the screen title?", "Does the header need action icons on the right — if so, which ones?"],
-    "bottom-navigation":    ["What are the 3–5 tab destinations?", "Which tab is the default active state?"],
-  }
-  return map[block] ?? ["Describe what this block needs to do."]
-}
 
 export function parseDesignMd(
   content: string,
