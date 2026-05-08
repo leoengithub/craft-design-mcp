@@ -62,12 +62,27 @@ export function registerContinueCraft(server: McpServer) {
 export async function advance(state: CraftWorkflowState, action: z.infer<typeof ActionSchema>): Promise<ContinueCraftOutput> {
   switch (action.type) {
     case "answer_project_questions": {
-      const [audience, tone, brandNotes] = action.answers
-      const currentBlock = state.block_plan.find(b => b.status === "current")?.block ?? state.block_plan[0].block
+      const [audience, tone, brandNotes, screensAnswer] = action.answers
+
+      // If block_plan was empty (custom goal), parse the 4th answer into block slugs
+      let blockPlan = state.block_plan
+      if (blockPlan.length === 0 && screensAnswer) {
+        const slugs = screensAnswer
+          .split(/[,\n]+|\band\b/)
+          .map(s => s.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").replace(/^-+|-+$/g, ""))
+          .filter(Boolean)
+        blockPlan = slugs.map((block, i) => ({
+          block,
+          status: (i === 0 ? "current" : "pending") as "current" | "pending",
+        }))
+      }
+
+      const currentBlock = blockPlan.find(b => b.status === "current")?.block ?? blockPlan[0]?.block ?? "screen"
       const next: CraftWorkflowState = {
         ...state,
         phase: "block_definition",
         current_block: currentBlock,
+        block_plan: blockPlan,
         project_context: { audience, tone, brand_notes: brandNotes },
         design_md: appendDesignMd(state.design_md, `## Goal\n${state.goal}\n\n## Project Context\nAudience: ${audience}\nTone: ${tone}${brandNotes ? `\nBrand: ${brandNotes}` : ""}`),
       }

@@ -50,9 +50,36 @@ export async function getSkillIndex(): Promise<SkillMeta[]> {
 }
 
 export async function loadSkill(blockType: string): Promise<Skill> {
-  const skillPath = join(ROOT, "skills", blockType, "SKILL.md")
-  const content = await readFile(skillPath, "utf-8")
-  return parseSkill(blockType, content)
+  try {
+    const skillPath = join(ROOT, "skills", blockType, "SKILL.md")
+    const content = await readFile(skillPath, "utf-8")
+    return parseSkill(blockType, content)
+  } catch {
+    return {
+      block_type: blockType,
+      layout_rules: [
+        "Establish a clear visual hierarchy — most important element dominates",
+        "Use consistent spacing throughout",
+        "Group related elements visually",
+      ],
+      component_patterns: [
+        "Use semantic HTML elements",
+        "Apply the chosen design system's typography scale",
+        "Keep interactive elements visually distinct",
+      ],
+      anti_patterns: [
+        "Avoid orphaned elements with no visual relationship to the rest",
+        "Don't mix more than two font sizes in a single row",
+        "Avoid ambiguous CTAs — label should describe the outcome",
+      ],
+      checklist: [
+        { dimension: "P0", text: "Primary action is immediately obvious", is_p0: true },
+        { dimension: "P0", text: "Content hierarchy matches the user goal", is_p0: true },
+        { dimension: "Layout", text: "Spacing is consistent and intentional", is_p0: false },
+        { dimension: "Copy", text: "Labels and CTAs describe outcomes, not mechanics", is_p0: false },
+      ],
+    }
+  }
 }
 
 function parseFrontmatter(content: string): SkillMeta | null {

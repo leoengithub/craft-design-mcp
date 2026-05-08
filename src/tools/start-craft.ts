@@ -61,18 +61,26 @@ export function registerStartCraft(server: McpServer) {
 
       const brandNote = customSystem ? " Your craft-ds.md was found and loaded as a custom direction option." : ""
       const componentsNote = existingComponents?.length ? ` ${existingComponents.length} existing components found in COMPONENTS.md — the agent will reuse them.` : ""
+      const hasKnownBlocks = state.block_plan.length > 0
+
+      const questions = [
+        "Who is the primary user — developers, designers, or managers?",
+        "What's the overall tone — professional and calm, playful, data-dense, editorial?",
+        "Any existing brand constraint — colors, fonts, a reference URL? (or skip)",
+        ...(!hasKnownBlocks ? ["What are the main screens or components you need to design? (list them, e.g. 'user list, rule editor, settings page')"] : []),
+      ]
+
+      const blocksNote = !hasKnownBlocks
+        ? ` The goal didn't match a known block pattern — the 4th question establishes the block plan. Include all 4 answers when calling answer_project_questions: [audience, tone, brand, screens].`
+        : ""
 
       return {
         content: [{
           type: "text",
           text: JSON.stringify({
             state,
-            questions: [
-              "Who is the primary user — developers, designers, or managers?",
-              "What's the overall tone — professional and calm, playful, data-dense, editorial?",
-              "Any existing brand constraint — colors, fonts, a reference URL? (or skip)",
-            ],
-            hint: `These are seed questions to establish project context. Ask them one at a time. For each, propose your own recommended answer before waiting — e.g. "Who is the primary user? (I'd assume developers based on the goal — confirm or redirect)". If any question can be answered by reading project files (package.json, README, existing code), read them instead of asking. Once context is established, call continue_craft({ state, action: { type: 'answer_project_questions', answers: [...] } }) with a concise summary of what was established.${brandNote}${componentsNote}`,
+            questions,
+            hint: `These are seed questions to establish project context. Ask them one at a time using the host input tool. For each, propose your own recommended answer before waiting — e.g. "Who is the primary user? (I'd assume developers based on the goal — confirm or redirect)". If any question can be answered by reading project files (package.json, README, existing code), read them instead of asking. Once context is established, call continue_craft({ state, action: { type: 'answer_project_questions', answers: [...] } }) with a concise summary of what was established.${brandNote}${componentsNote}${blocksNote}`,
           }),
         }],
       }
@@ -101,7 +109,7 @@ export function inferBlockPlan(goal: string) {
       }))
     }
   }
-  return [{ block: "hero-section", status: "current" as const }]
+  return []
 }
 
 function blockQuestions(block: string): string[] {
