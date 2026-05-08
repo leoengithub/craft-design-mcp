@@ -4,6 +4,7 @@
   "description": "Block-level design intelligence for AI agents",
   "type": "module",
   "main": "dist/index.js",
+  "packageManager": "pnpm@9.0.0",
   "scripts": {
     "build": "tsc",
     "dev": "tsx watch src/index.ts",
