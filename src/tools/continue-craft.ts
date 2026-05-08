@@ -91,7 +91,7 @@ export async function advance(state: CraftWorkflowState, action: z.infer<typeof 
         hint: [
           `Read any relevant project files (existing components, data models, API types, route files) to understand what "${currentBlock}" needs to handle in the context of "${state.goal}".`,
           `Then ask 2–3 questions specific to this block — not generic. Good questions establish: what data or actions this block shows or collects; the user's primary goal in this view; any edge cases or states (empty, error, loading) that matter here.`,
-          `Ask one at a time using the host input tool. Propose your recommendation before each. If an answer opens a branch, ask one follow-up.`,
+          `Ask one at a time via chat — one at a time. Propose your recommendation before each. If an answer opens a branch, ask one follow-up.`,
           `When you have enough to define the block, call continue_craft({ state, action: { type: "answer_block_questions", answers: [primary_action_or_purpose, data_or_content_summary, edge_cases_or_notes] } }).`,
         ].join(" "),
       }
@@ -191,9 +191,13 @@ export async function advance(state: CraftWorkflowState, action: z.infer<typeof 
         ? state.custom_design_system?.anti_patterns ?? []
         : system?.anti_patterns ?? []
 
+      // Infer layout mode from block type, direction, and goal
+      const mode = inferMode(state.goal, block, state.direction.id)
+
       const craftContext = {
         block,
         parent_goal: state.goal,
+        mode,
         brief: {
           primary_action: blockDef.primary_action ?? "",
           audience: state.project_context?.audience,
@@ -214,14 +218,35 @@ export async function advance(state: CraftWorkflowState, action: z.infer<typeof 
         existing_components: state.existing_components,
       }
 
+      // plugin_spec: machine-readable version for Craft Bridge Figma plugin
+      const pluginSpec = {
+        version: "1" as const,
+        mode,
+        block,
+        goal: state.goal,
+        direction: state.direction,
+        tokens,
+        brief: craftContext.brief,
+        platform: state.project_context?.platform ?? "web",
+        constraints: craftContext.constraints,
+        existing_components: state.existing_components,
+      }
+
       const patch = `\n### ${block} 🔄\n- Primary action: ${blockDef.primary_action}\n`
       const next: CraftWorkflowState = { ...state, phase: "ready", design_md: state.design_md + patch }
 
       return {
         state: next,
         craft_context: craftContext,
+        plugin_spec: pluginSpec,
         design_md_patch: patch,
-        hint: `State your execution intent in one sentence, then execute using the available execution tool. After execution, call validate_design({ description: "<what you built>", craft_context }). Do not show output that fails validation — fix violations first.`,
+        hint: [
+          `Mode is "${mode}" — ${mode === "structured" ? "use auto-layout frames and instance components by node ID if Craft Bridge has run setup" : "use free placement for creative composition"}.`,
+          `State your execution intent in one sentence, then execute using the available execution tool.`,
+          `After execution, call validate_design({ description: "<what you built>", craft_context }).`,
+          `Do not show output that fails validation — fix violations first.`,
+          `plugin_spec is provided for the Craft Bridge Figma plugin if the user prefers to render via plugin instead of agent.`,
+        ].join(" "),
       }
     }
 
@@ -308,6 +333,27 @@ function buildPreview(block: string, primaryAction: string, directionName: strin
       `Side-by-side pricing tiers. One visually elevated as recommended. Price is the dominant text in each card. Single CTA per tier: "${action}". ${dir} feel.`,
   }
   return previews[block]?.(primaryAction, directionName) ?? `A ${block} block designed for: ${primaryAction}.`
+}
+
+// Infers layout mode from goal, block type, and direction — never asks the user.
+// "structured" = auto-layout + component instances (default, safer)
+// "free" = absolute positioning, creative composition
+export function inferMode(goal: string, blockType: string, directionId: string): "free" | "structured" {
+  // Structural blocks are always structured
+  const structuredBlocks = [
+    "data-table", "form", "sidebar", "navigation", "kpi-summary",
+    "onboarding-step", "bottom-navigation", "mobile-screen-header", "footer", "modal",
+  ]
+  if (structuredBlocks.includes(blockType)) return "structured"
+
+  // Data-dense direction always structured
+  if (directionId === "data-dense-pro") return "structured"
+
+  // Goal signals explicit creative intent → free
+  if (/\b(creative|campaign|editorial|portfolio|illustration|artistic|expressive|branding|magazine)\b/i.test(goal)) return "free"
+
+  // Default: structured (safer, more consistent across environments)
+  return "structured"
 }
 
 // Ranks the 3 built-in directions based on brief signals. Prepends custom direction if present.

@@ -45,7 +45,7 @@ export function registerStartCraft(server: McpServer) {
               hint: [
                 `Resuming. Read any relevant project files to understand what "${currentBlock?.block}" needs in the context of "${goal}".`,
                 `Ask 2–3 focused questions specific to this block — what data or actions it handles, the user's primary goal here, any edge cases.`,
-                `Ask one at a time using the host input tool, propose your recommendation first.`,
+                `Ask one at a time via chat — one at a time, propose your recommendation first.`,
                 `Then call continue_craft({ state, action: { type: "answer_block_questions", answers: [...] } }).`,
               ].join(" "),
             }),
@@ -80,7 +80,7 @@ export function registerStartCraft(server: McpServer) {
               `Then ask 2–3 focused questions specific to designing: "${goal}".`,
               `Good questions for this phase establish: who uses this and what's their job-to-be-done in this flow; what a successful interaction looks like (primary action / outcome); any hard constraints from the existing system or data model.`,
               `Do NOT ask generic questions like "who is the audience" or "what's the tone" — derive those from the goal and codebase. Only ask what you genuinely can't infer.`,
-              `Ask one at a time using the host input tool. Propose your own recommendation before waiting.`,
+              `Ask one at a time via chat — one at a time. Propose your own recommendation before waiting.`,
               `Once context is established, call continue_craft({ state, action: { type: 'answer_project_questions', answers: [context_summary, primary_success_criteria, constraints_or_tone${!hasKnownBlocks ? ", screens_list" : ""}] } }).${screensInstruction}${brandNote}${componentsNote}`,
             ].join(" "),
           }),

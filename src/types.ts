@@ -95,6 +95,28 @@ export type ContinueCraftAction =
   | { type: "approve_block"; block: string }
   | { type: "restart_block" }
 
+export interface PluginSpec {
+  version: "1"
+  mode: "free" | "structured"
+  block: string
+  goal: string
+  direction: { id: string; name: string; design_system: string }
+  tokens: DesignSystemTokens
+  brief: {
+    primary_action: string
+    audience?: string
+    tone?: string
+    notes?: string[]
+  }
+  platform: "web" | "mobile" | "both"
+  constraints: {
+    layout_rules: string[]
+    component_patterns: string[]
+    anti_patterns: string[]
+  }
+  existing_components?: string[]
+}
+
 export interface ContinueCraftOutput {
   state: CraftWorkflowState
   design_md_patch?: string
@@ -102,6 +124,7 @@ export interface ContinueCraftOutput {
   directions?: Direction[]
   design_preview?: string
   craft_context?: CraftContext
+  plugin_spec?: PluginSpec
   resume_prompt?: string
   hint: string
 }
