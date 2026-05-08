@@ -2,7 +2,7 @@ import { readFile, readdir } from "node:fs/promises"
 import { join, dirname } from "node:path"
 import { fileURLToPath } from "node:url"
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../../..")
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..")
 
 interface SkillMeta {
   block_type: string
@@ -11,11 +11,18 @@ interface SkillMeta {
   scenario: "web" | "mobile" | "both"
 }
 
+export interface ChecklistItem {
+  dimension: string
+  text: string
+  is_p0: boolean
+}
+
 interface Skill {
   block_type: string
   layout_rules: string[]
   component_patterns: string[]
   anti_patterns: string[]
+  checklist: ChecklistItem[]
 }
 
 let skillIndex: SkillMeta[] | null = null
@@ -66,7 +73,24 @@ function parseSkill(blockType: string, content: string): Skill {
     layout_rules: extractSection(content, "Layout rules"),
     component_patterns: extractSection(content, "Component patterns"),
     anti_patterns: extractSection(content, "Anti-patterns"),
+    checklist: parseChecklist(content),
   }
+}
+
+function parseChecklist(content: string): ChecklistItem[] {
+  const match = content.match(/## Self-critique checklist\n([\s\S]+?)(?=\n## |$)/)
+  if (!match) return []
+  return match[1]
+    .split("\n")
+    .filter(l => /^- \[ \]/.test(l))
+    .map(l => {
+      const text = l.slice(6).trim()
+      const is_p0 = text.startsWith("P0:")
+      const colonIdx = text.indexOf(":")
+      const dimension = colonIdx !== -1 ? text.slice(0, colonIdx).trim() : "General"
+      const body = colonIdx !== -1 ? text.slice(colonIdx + 1).trim() : text
+      return { dimension, text: body, is_p0 }
+    })
 }
 
 function extractField(yaml: string, key: string): string | undefined {

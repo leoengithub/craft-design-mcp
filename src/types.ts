@@ -30,6 +30,11 @@ export interface CraftWorkflowState {
     notes?: string[]
   }>
   design_md: string
+  existing_components?: string[]
+  custom_design_system?: {
+    tokens: DesignSystemTokens
+    anti_patterns: string[]
+  }
 }
 
 export interface Direction {
@@ -78,6 +83,7 @@ export interface CraftContext {
     anti_patterns: string[]
   }
   design_md_snapshot: string
+  existing_components?: string[]
 }
 
 export type ContinueCraftAction =

@@ -51,3 +51,4 @@ Pricing is a decision page. Every element either helps the user choose the right
 ## Example prompts
 - "Pricing for a SaaS with Free, Pro ($29/mo), and Team ($99/mo) tiers"
 - "Pricing row for an API product — usage-based with a flat starter tier"
+- "Pricing comparison for a design tool with Starter, Studio, and Agency plans"

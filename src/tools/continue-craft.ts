@@ -14,7 +14,7 @@ const ActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("restart_block") }),
 ])
 
-const StateSchema: z.ZodType<CraftWorkflowState> = z.object({
+const StateSchema = z.object({
   phase: z.enum(["project_setup", "block_definition", "direction_choice", "define_or_design", "ready", "block_done", "all_done"]),
   goal: z.string(),
   block_plan: z.array(z.object({ block: z.string(), status: z.enum(["pending", "current", "completed"]) })),
@@ -35,6 +35,11 @@ const StateSchema: z.ZodType<CraftWorkflowState> = z.object({
     notes: z.array(z.string()).optional(),
   })),
   design_md: z.string(),
+  existing_components: z.array(z.string()).optional(),
+  custom_design_system: z.object({
+    tokens: z.any().transform(v => v as import("../types.js").DesignSystemTokens),
+    anti_patterns: z.array(z.string()),
+  }).optional(),
 })
 
 export function registerContinueCraft(server: McpServer) {
@@ -46,7 +51,7 @@ export function registerContinueCraft(server: McpServer) {
       action: ActionSchema,
     },
     async ({ state, action }) => {
-      const output = await advance(state, action)
+      const output = await advance(state as CraftWorkflowState, action)
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],
       }
@@ -54,7 +59,7 @@ export function registerContinueCraft(server: McpServer) {
   )
 }
 
-async function advance(state: CraftWorkflowState, action: z.infer<typeof ActionSchema>): Promise<ContinueCraftOutput> {
+export async function advance(state: CraftWorkflowState, action: z.infer<typeof ActionSchema>): Promise<ContinueCraftOutput> {
   switch (action.type) {
     case "answer_project_questions": {
       const [audience, tone, brandNotes] = action.answers
@@ -79,7 +84,7 @@ async function advance(state: CraftWorkflowState, action: z.infer<typeof ActionS
       const updatedDefs = { ...state.block_definitions, [block]: { primary_action: primaryAction, notes: rest } }
 
       if (!state.direction) {
-        const directions = getDirections(state.project_context?.tone)
+        const directions = getDirections(state)
         const next: CraftWorkflowState = { ...state, phase: "direction_choice", block_definitions: updatedDefs }
         return {
           state: next,
@@ -98,7 +103,15 @@ async function advance(state: CraftWorkflowState, action: z.infer<typeof ActionS
     }
 
     case "choose_direction": {
-      const direction = DIRECTIONS.find(d => d.id === action.direction_id)!
+      const directions = getDirections(state)
+      const direction = directions.find(d => d.id === action.direction_id)
+      if (!direction) {
+        return {
+          state: { ...state, phase: "direction_choice" },
+          directions,
+          hint: `Unknown direction_id "${action.direction_id}". Present the available directions again and call choose_direction with one of their ids.`,
+        }
+      }
       const block = state.current_block ?? ""
       const primaryAction = state.block_definitions[block]?.primary_action ?? ""
       const preview = buildPreview(block, primaryAction, direction.name)
@@ -137,9 +150,27 @@ async function advance(state: CraftWorkflowState, action: z.infer<typeof ActionS
 
     case "request_design": {
       const block = state.current_block ?? ""
+      if (!state.direction) {
+        return {
+          state: { ...state, phase: "direction_choice" },
+          directions: getDirections(state),
+          hint: "Choose a direction before requesting design.",
+        }
+      }
       const skill = await loadSkill(block)
-      const system = await loadDesignSystem(state.direction?.design_system ?? "linear")
       const blockDef = state.block_definitions[block] ?? {}
+
+      // Use custom tokens if direction is "custom", otherwise load from disk
+      const designSystemName = state.direction.design_system
+      const system = designSystemName === "custom"
+        ? undefined
+        : await loadDesignSystem(designSystemName)
+      const tokens = designSystemName === "custom" && state.custom_design_system
+        ? state.custom_design_system.tokens
+        : system?.tokens ?? (await loadDesignSystem("linear")).tokens
+      const designSystemAntiPatterns = designSystemName === "custom"
+        ? state.custom_design_system?.anti_patterns ?? []
+        : system?.anti_patterns ?? []
 
       const craftContext = {
         block,
@@ -151,13 +182,17 @@ async function advance(state: CraftWorkflowState, action: z.infer<typeof ActionS
           notes: blockDef.notes,
         },
         direction: state.direction!,
-        tokens: system.tokens,
+        tokens,
         constraints: {
           layout_rules: skill.layout_rules,
           component_patterns: skill.component_patterns,
-          anti_patterns: skill.anti_patterns,
+          anti_patterns: [
+            ...skill.anti_patterns,
+            ...designSystemAntiPatterns,
+          ],
         },
         design_md_snapshot: state.design_md,
+        existing_components: state.existing_components,
       }
 
       const patch = `\n### ${block} 🔄\n- Primary action: ${blockDef.primary_action}\n`
@@ -172,44 +207,51 @@ async function advance(state: CraftWorkflowState, action: z.infer<typeof ActionS
     }
 
     case "approve_block": {
-      const updatedPlan = state.block_plan.map(b =>
-        b.block === action.block ? { ...b, status: "completed" as const } :
-        b.status === "pending" ? { ...b, status: "current" as const } : b
-      )
-      // Only set the first pending block as current
-      let foundNext = false
-      const finalPlan = updatedPlan.map(b => {
-        if (b.block === action.block) return b
-        if (!foundNext && b.status === "current") { foundNext = true; return b }
+      let promoted = false
+      const finalPlan = state.block_plan.map(b => {
+        if (b.block === action.block) return { ...b, status: "completed" as const }
+        if (!promoted && b.status === "pending") {
+          promoted = true
+          return { ...b, status: "current" as const }
+        }
+        if (b.status === "current") return { ...b, status: "pending" as const }
         return b
       })
 
       const nextBlock = finalPlan.find(b => b.status === "current" && b.block !== action.block)
       const allDone = !nextBlock
 
+      // Block sequencing: suggest natural next blocks not already in the plan
+      const planned = new Set(finalPlan.map(b => b.block))
+      const suggestions = (BLOCK_SEQUENCES[action.block] ?? []).filter(b => !planned.has(b))
+      const suggestionText = suggestions.length
+        ? ` Consider adding next: ${suggestions.slice(0, 2).join(" or ")}.`
+        : ""
+
       const patch = `\n### ${action.block} ✅\n`
+      const designMd = markBlockCompleted(state.design_md, action.block)
       const next: CraftWorkflowState = {
         ...state,
         phase: allDone ? "all_done" : "block_done",
         current_block: nextBlock?.block,
         block_plan: finalPlan,
-        design_md: state.design_md + patch,
+        design_md: designMd,
       }
 
       return {
         state: next,
         design_md_patch: patch,
         resume_prompt: allDone
-          ? "All blocks complete. Your DESIGN.md has the full design record."
-          : `${action.block} done. Run /craft to continue with ${nextBlock?.block}.`,
+          ? `All blocks complete. Your DESIGN.md has the full design record.${suggestionText}`
+          : `${action.block} done. Run /craft to continue with ${nextBlock?.block}.${suggestionText}`,
         hint: allDone
-          ? "Inform the user the design is complete."
+          ? "Inform the user the design is complete. Include the suggestionText if present."
           : `Show the resume_prompt. Write design_md_patch to DESIGN.md. The user will run /craft to continue.`,
       }
     }
 
     case "restart_block": {
-      const directions = getDirections(state.project_context?.tone)
+      const directions = getDirections(state)
       const next: CraftWorkflowState = { ...state, phase: "direction_choice", direction: undefined }
       return {
         state: next,
@@ -222,6 +264,18 @@ async function advance(state: CraftWorkflowState, action: z.infer<typeof ActionS
 
 function appendDesignMd(existing: string, addition: string): string {
   return existing ? `${existing}\n\n${addition}` : `# Project Design Context\n\n${addition}`
+}
+
+function markBlockCompleted(designMd: string, block: string): string {
+  const inProgressHeading = new RegExp(`\\n### ${escapeRegExp(block)} 🔄\\n- Primary action:.*(?=\\n### |$)`, "s")
+  if (inProgressHeading.test(designMd)) {
+    return designMd.replace(inProgressHeading, `\n### ${block} ✅\n`)
+  }
+  return designMd + `\n### ${block} ✅\n`
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
 function blockQuestions(block: string): string[] {
@@ -256,8 +310,63 @@ function buildPreview(block: string, primaryAction: string, directionName: strin
   return previews[block]?.(primaryAction, directionName) ?? `A ${block} block designed for: ${primaryAction}.`
 }
 
-function getDirections(tone?: string): Direction[] {
-  return DIRECTIONS.slice(0, 3)
+// Ranks the 3 built-in directions based on brief signals. Prepends custom direction if present.
+export function getDirections(state: CraftWorkflowState): Direction[] {
+  const tone = (state.project_context?.tone ?? "").toLowerCase()
+  const platform = state.project_context?.platform
+  const block = state.current_block ?? ""
+
+  const scores: Record<string, number> = { "focused-calm": 0, "warm-editorial": 0, "data-dense-pro": 0 }
+
+  // Tone signals
+  if (/calm|clean|minimal|simple|professional|sharp|precise/.test(tone)) scores["focused-calm"] += 2
+  if (/warm|editorial|content|blog|document|readable|human/.test(tone)) scores["warm-editorial"] += 2
+  if (/data|dense|technical|analytics|dashboard|power/.test(tone)) scores["data-dense-pro"] += 2
+
+  // Block type signals
+  if (["data-table", "kpi-summary"].includes(block)) scores["data-dense-pro"] += 3
+  if (["card-grid", "footer"].includes(block)) scores["warm-editorial"] += 1
+  if (["sidebar", "navigation"].includes(block)) scores["focused-calm"] += 1
+
+  // Platform signals — mobile rarely benefits from data-dense-pro first
+  if (platform === "mobile") scores["data-dense-pro"] -= 2
+
+  const ranked = [...DIRECTIONS].sort((a, b) => (scores[b.id] ?? 0) - (scores[a.id] ?? 0))
+
+  // Prepend the custom direction if craft-ds.md was loaded
+  if (state.custom_design_system) {
+    const customDirection: Direction = {
+      id: "custom",
+      name: "Your Brand",
+      description: "Uses your project's own design tokens from craft-ds.md. Stays true to your existing visual language.",
+      reference: "craft-ds.md",
+      design_system: "custom",
+      palette_preview: [],
+      typeface: "From your brand tokens",
+    }
+    return [customDirection, ...ranked]
+  }
+
+  return ranked
+}
+
+// Natural next-block suggestions per block type. Used for block sequencing after approval.
+const BLOCK_SEQUENCES: Record<string, string[]> = {
+  "hero-section":          ["navigation", "feature-highlights", "pricing-row"],
+  "navigation":            ["hero-section", "feature-highlights", "footer"],
+  "feature-highlights":    ["pricing-row", "card-grid", "footer"],
+  "pricing-row":           ["footer", "feature-highlights"],
+  "footer":                [],
+  "data-table":            ["kpi-summary", "sidebar", "empty-state"],
+  "kpi-summary":           ["data-table", "card-grid"],
+  "form":                  ["onboarding-step", "empty-state"],
+  "modal":                 [],
+  "sidebar":               ["navigation", "data-table"],
+  "card-grid":             ["footer", "feature-highlights"],
+  "onboarding-step":       ["form", "empty-state"],
+  "empty-state":           [],
+  "mobile-screen-header":  ["bottom-navigation"],
+  "bottom-navigation":     ["mobile-screen-header"],
 }
 
 const DIRECTIONS: Direction[] = [
@@ -265,9 +374,9 @@ const DIRECTIONS: Direction[] = [
     id: "focused-calm",
     name: "Focused & Calm",
     description: "Clean, restrained, lots of breathing room. Every element earns its place. Feels like Linear or Vercel.",
-    reference: "Linear, Vercel",
+    reference: "Linear, Vercel, Stripe",
     design_system: "linear",
-    palette_preview: ["#0066FF", "#F7F7F5", "#1A1A1A", "#6B6B6B"],
+    palette_preview: ["#5E6AD2", "#F7F7F5", "#1A1A1A", "#6B6B6B"],
     typeface: "Inter / Geist",
   },
   {
@@ -282,10 +391,10 @@ const DIRECTIONS: Direction[] = [
   {
     id: "data-dense-pro",
     name: "Data-Dense Pro",
-    description: "Information-rich, tight spacing, built for power users. Feels like PostHog or a Bloomberg terminal.",
+    description: "Information-rich, tight spacing, built for power users. Feels like PostHog or a ClickHouse dashboard.",
     reference: "PostHog, ClickHouse",
     design_system: "posthog",
-    palette_preview: ["#1D4AFF", "#1A1A1A", "#FFFFFF", "#888888"],
+    palette_preview: ["#F54E00", "#151515", "#EEEEEE", "#999999"],
     typeface: "Inter / JetBrains Mono",
   },
 ]
