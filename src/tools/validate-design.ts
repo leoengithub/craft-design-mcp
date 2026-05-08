@@ -106,7 +106,7 @@ function extractSignals(rule: string): string[] {
 }
 
 // Checks a P0 rule text against the description. Returns a failure reason string or null.
-function checkP0Rule(ruleText: string, desc: string): string | null {
+export function checkP0Rule(ruleText: string, desc: string): string | null {
   const rule = ruleText.toLowerCase()
   const max = extractMaximum(rule)
 

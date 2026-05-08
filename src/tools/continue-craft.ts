@@ -267,9 +267,9 @@ function appendDesignMd(existing: string, addition: string): string {
 }
 
 function markBlockCompleted(designMd: string, block: string): string {
-  const inProgressHeading = new RegExp(`\\n### ${escapeRegExp(block)} 🔄\\n- Primary action:.*(?=\\n### |$)`, "s")
+  const inProgressHeading = new RegExp(`(^|\\n)### ${escapeRegExp(block)} 🔄\\n- Primary action:.*?(?=\\n### |$)`, "s")
   if (inProgressHeading.test(designMd)) {
-    return designMd.replace(inProgressHeading, `\n### ${block} ✅\n`)
+    return designMd.replace(inProgressHeading, `$1### ${block} ✅\n`)
   }
   return designMd + `\n### ${block} ✅\n`
 }
