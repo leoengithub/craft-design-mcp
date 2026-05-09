@@ -25,6 +25,7 @@ interface AgentSession {
 }
 
 const sessions = new Map<string, AgentSession>()
+const ACTIVE_WINDOW_MS = 45_000
 
 function getSession(sessionId: string): AgentSession {
   let session = sessions.get(sessionId)
@@ -154,12 +155,36 @@ export function getExistingSessionStatus(sessionId: string) {
     if (request.status === "queued" || request.status === "delivered") pendingCount += 1
   }
 
-  return { ok: true, connected: true, pending_count: pendingCount }
+  const connected = session.lastSeenAt != null && (Date.now() - session.lastSeenAt) <= ACTIVE_WINDOW_MS
+  return { ok: connected, connected, pending_count: pendingCount }
 }
 
 export function touchSession(sessionId: string): void {
   const session = getSession(sessionId)
   session.lastSeenAt = Date.now()
+}
+
+export function listActiveSessions(): Array<{ session_id: string; pending_count: number; last_seen_at: number }> {
+  const now = Date.now()
+  const items: Array<{ session_id: string; pending_count: number; last_seen_at: number }> = []
+
+  for (const [sessionId, session] of sessions.entries()) {
+    if (session.lastSeenAt == null) continue
+    if ((now - session.lastSeenAt) > ACTIVE_WINDOW_MS) continue
+
+    let pendingCount = 0
+    for (const request of session.requests.values()) {
+      if (request.status === "queued" || request.status === "delivered") pendingCount += 1
+    }
+
+    items.push({
+      session_id: sessionId,
+      pending_count: pendingCount,
+      last_seen_at: session.lastSeenAt,
+    })
+  }
+
+  return items.sort((a, b) => b.last_seen_at - a.last_seen_at)
 }
 
 function flushWaiters(session: AgentSession): void {

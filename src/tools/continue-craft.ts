@@ -3,6 +3,9 @@ import { z } from "zod"
 import type { CraftWorkflowState, ContinueCraftOutput, Direction } from "../types.js"
 import { loadSkill } from "../skills/loader.js"
 import { loadDesignSystem } from "../design-systems/loader.js"
+import { buildRenderIntent } from "../agent/render-intent.js"
+import { buildRenderBlockPlan } from "../agent/render-plan.js"
+import { buildRenderTreePlan } from "../agent/render-tree.js"
 
 const ActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("answer_project_questions"), answers: z.array(z.string()) }),
@@ -236,6 +239,9 @@ export async function advance(state: CraftWorkflowState, action: z.infer<typeof 
         existing_components: state.existing_components,
       }
 
+      const renderIntent = buildRenderIntent(state, craftContext)
+      const renderPlan = buildRenderBlockPlan(state, craftContext)
+      const renderTree = buildRenderTreePlan(state, craftContext)
       const patch = `\n### ${block} 🔄\n- Primary action: ${blockDef.primary_action}\n`
       const next: CraftWorkflowState = { ...state, phase: "ready", design_md: state.design_md + patch }
 
@@ -243,8 +249,11 @@ export async function advance(state: CraftWorkflowState, action: z.infer<typeof 
         state: next,
         craft_context: craftContext,
         plugin_spec: pluginSpec,
+        render_intent: renderIntent,
+        render_plan: renderPlan,
+        render_tree: renderTree,
         design_md_patch: patch,
-        hint: buildExecutionHint(next, mode),
+        hint: buildExecutionHint(next, mode, renderIntent.artifact_name),
       }
     }
 
@@ -304,7 +313,7 @@ export async function advance(state: CraftWorkflowState, action: z.infer<typeof 
   }
 }
 
-function buildExecutionHint(state: CraftWorkflowState, mode: "free" | "structured"): string {
+function buildExecutionHint(state: CraftWorkflowState, mode: "free" | "structured", artifactName: string): string {
   const base = [
     `Mode is "${mode}" — ${mode === "structured" ? "use auto-layout frames and instance components by node ID if Craft Bridge has run setup" : "use free placement for creative composition"}.`,
     `After execution, call validate_design({ description: "<what you built>", craft_context }).`,
@@ -316,9 +325,13 @@ function buildExecutionHint(state: CraftWorkflowState, mode: "free" | "structure
       ...base,
       `State your execution intent in one sentence, then render into Figma session "${state.execution.figma_session_id}".`,
       `Call figma_get_context(session_id) first if you need the current file state or selected node.`,
-      `Then queue the render via figma_prepare_plan({ session_id: "${state.execution.figma_session_id}", description: "<plan preview>", ops: [...] }) and wait with figma_wait_for_result.`,
+      `Prefer the provided render_tree. Call figma_render_tree({ session_id: "${state.execution.figma_session_id}", render_tree, render_intent }) for final rendering.`,
+      `Use render_plan only as a transitional fallback when render_tree is unavailable.`,
+      `Render a final-looking design, not a wireframe. Use real fills, spacing, hierarchy, surfaces, and interaction affordances from the selected design system tokens.`,
+      `Use render_intent.artifact_name "${artifactName}" as the stable name for the rendered artifact and its sibling local asset section.`,
+      `Do not use scaffold_block or placeholder slots unless the user explicitly asks for a scaffold.`,
       `Do not generate React, HTML, or CSS when the renderer is Figma — the plugin is the execution surface.`,
-      `plugin_spec is provided as a structured fallback if you need to scaffold a block with Craft Bridge semantics.`,
+      `render_tree is the primary Figma execution contract. render_intent is for execution context. figma_render_block, figma_execute_op, and figma_prepare_plan are fallback or debugging paths, not normal design rendering.`,
     ].join(" ")
   }
 

@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
 import { URL } from "node:url"
-import { pollNext, postResult, getSessionStatus, touchSession } from "../agent/sessions.js"
+import { pollNext, postResult, getSessionStatus, touchSession, listActiveSessions } from "../agent/sessions.js"
 import type { AgentResultEnvelope } from "../types.js"
 
 let serverStarted = false
@@ -47,6 +47,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       return
     }
     json(res, 200, getSessionStatus(sessionId))
+    return
+  }
+
+  if (req.method === "GET" && url.pathname === "/agent/sessions") {
+    json(res, 200, { sessions: listActiveSessions() })
     return
   }
 

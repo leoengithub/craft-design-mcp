@@ -91,6 +91,155 @@ export interface CraftContext {
   existing_components?: string[]
 }
 
+export interface RenderIntent {
+  artifact_name: string
+  renderer: "figma" | "code"
+  surface_kind: "marketing" | "application" | "settings" | "dashboard" | "auth" | "content" | "custom"
+  target_context?: {
+    target_node_id?: string
+    selection_name?: string
+    file_session_id?: string
+  }
+  content: {
+    block_tree: Array<{
+      id: string
+      kind: string
+      purpose: string
+      content?: Record<string, string | string[]>
+      children?: string[]
+    }>
+    primary_action?: string
+  }
+  style: {
+    tone?: string
+    density?: "compact" | "balanced" | "spacious"
+    platform?: "web" | "mobile" | "both"
+  }
+  design_system: {
+    source: "craft"
+    tokens: string[]
+    component_preferences: string[]
+    anti_patterns: string[]
+  }
+  execution: {
+    auto_run: boolean
+    reuse_existing_assets: boolean
+    materialize_missing_assets: boolean
+    persist_generated_assets: boolean
+  }
+}
+
+export interface RenderBlockPlan {
+  artifact_name: string
+  asset_section_name: string
+  block: string
+  goal: string
+  platform: "web" | "mobile" | "both"
+  mode: "free" | "structured"
+  layout:
+    | "hero"
+    | "navigation"
+    | "feedback-bar"
+    | "pricing"
+    | "feature-grid"
+    | "kpi-summary"
+    | "data-table"
+    | "sidebar"
+    | "form"
+    | "empty-state"
+    | "footer"
+    | "toolbar"
+    | "accordion"
+    | "generic"
+  direction: {
+    id: string
+    name: string
+    design_system: string
+  }
+  tokens: DesignSystemTokens
+  style: {
+    primary: string
+    bg: string
+    surface: string
+    text: string
+    muted: string
+    border: string
+    accent?: string
+  }
+  content: {
+    eyebrow?: string
+    title?: string
+    body?: string
+    cta_label?: string
+    secondary_cta_label?: string
+    stats?: Array<{ label: string; value: string; delta?: string }>
+    items?: Array<{ title: string; body?: string; badge?: string; meta?: string }>
+    columns?: Array<{ title: string; price?: string; body?: string; cta_label?: string; featured?: boolean; bullets?: string[] }>
+    links?: string[]
+  }
+}
+
+export type RenderTextRole = "display" | "headline" | "subheadline" | "body" | "label" | "caption"
+
+export type RenderTreeNode =
+  | {
+      kind: "stack"
+      name: string
+      direction: "VERTICAL" | "HORIZONTAL"
+      gap?: number
+      padding?: number
+      width?: number
+      min_height?: number
+      fill?: string
+      stroke?: string
+      radius?: number
+      align?: "MIN" | "CENTER" | "SPACE_BETWEEN"
+      children: RenderTreeNode[]
+    }
+  | {
+      kind: "text"
+      text: string
+      role: RenderTextRole
+      color?: string
+      max_width?: number
+      align?: "LEFT" | "CENTER"
+    }
+  | {
+      kind: "button"
+      label: string
+      variant: "primary" | "secondary" | "ghost"
+    }
+  | {
+      kind: "badge"
+      label: string
+    }
+  | {
+      kind: "divider"
+    }
+  | {
+      kind: "spacer"
+      size: number
+    }
+
+export interface RenderTreePlan {
+  artifact_name: string
+  asset_section_name: string
+  goal: string
+  block: string
+  platform: "web" | "mobile" | "both"
+  tokens: DesignSystemTokens
+  palette: {
+    primary: string
+    bg: string
+    surface: string
+    text: string
+    muted: string
+    border: string
+    accent?: string
+  }
+  root: RenderTreeNode
+}
+
 export type ContinueCraftAction =
   | { type: "answer_project_questions"; answers: string[] }
   | { type: "answer_block_questions"; answers: string[] }
@@ -130,6 +279,9 @@ export interface ContinueCraftOutput {
   design_preview?: string
   craft_context?: CraftContext
   plugin_spec?: PluginSpec
+  render_intent?: RenderIntent
+  render_plan?: RenderBlockPlan
+  render_tree?: RenderTreePlan
   resume_prompt?: string
   hint: string
 }
@@ -153,6 +305,8 @@ export type AgentOp =
   | { op: "create_text"; text: string; fontSize?: number; fontWeight?: "Regular" | "Medium" | "SemiBold"; fill?: string; parentId?: string; x?: number; y?: number }
   | { op: "apply_fill"; nodeId: string; hex: string }
   | { op: "set_text"; nodeId: string; text: string }
+  | { op: "render_block"; plan: RenderBlockPlan }
+  | { op: "render_tree"; plan: RenderTreePlan }
   | { op: "scaffold_block"; spec: PluginSpec }
 
 export interface OpResult {
@@ -167,7 +321,7 @@ export type AgentRequestType = "get_context" | "execute_op" | "execute_plan"
 export type AgentRequestPayload =
   | {}
   | { op: AgentOp }
-  | { description: string; ops: AgentOp[] }
+  | { description: string; ops: AgentOp[]; render_intent?: RenderIntent }
 
 export interface AgentRequestEnvelope {
   request_id: string

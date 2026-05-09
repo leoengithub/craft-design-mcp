@@ -21,6 +21,15 @@ export function registerStartCraft(server: McpServer) {
       figma_session_id: z.string().optional().describe("Craft Bridge Figma session ID when rendering into Figma"),
     },
     async ({ goal, design_md, components_md, craft_ds_md, renderer, figma_session_id }) => {
+      if (!renderer) {
+        throw new Error([
+          "renderer_required",
+          "Ask the user exactly: Do you want this in the code or in Figma?",
+          "Then call start_craft again with renderer set.",
+          "If the user chooses Figma, resolve the active Craft Bridge session first.",
+        ].join(" "))
+      }
+
       const existingComponents = components_md ? parseComponentsMd(components_md) : undefined
       const customSystem = craft_ds_md ? await parseCraftDsMd(craft_ds_md) : undefined
 

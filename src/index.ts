@@ -7,8 +7,11 @@ import { registerListSkills } from "./tools/list-skills.js"
 import { registerListDesignSystems } from "./tools/list-design-systems.js"
 import { registerFigmaGetContext } from "./tools/figma-get-context.js"
 import { registerFigmaCheckSession } from "./tools/figma-check-session.js"
+import { registerFigmaListSessions } from "./tools/figma-list-sessions.js"
 import { registerFigmaExecuteOp } from "./tools/figma-execute-op.js"
 import { registerFigmaPreparePlan } from "./tools/figma-prepare-plan.js"
+import { registerFigmaRenderBlock } from "./tools/figma-render-block.js"
+import { registerFigmaRenderTree } from "./tools/figma-render-tree.js"
 import { registerFigmaWaitForResult } from "./tools/figma-wait-for-result.js"
 import { startHttpServer } from "./http/server.js"
 
@@ -23,9 +26,12 @@ registerValidateDesign(server)
 registerListSkills(server)
 registerListDesignSystems(server)
 registerFigmaCheckSession(server)
+registerFigmaListSessions(server)
 registerFigmaGetContext(server)
 registerFigmaExecuteOp(server)
 registerFigmaPreparePlan(server)
+registerFigmaRenderBlock(server)
+registerFigmaRenderTree(server)
 registerFigmaWaitForResult(server)
 
 server.prompt("craft", "Start or resume a block-by-block design workflow", () => ({
@@ -38,11 +44,13 @@ server.prompt("craft", "Start or resume a block-by-block design workflow", () =>
         "",
         "## Renderer selection",
         "- Before starting the workflow, ask this exact question when renderer is not already explicit: 'Do you want this in the code or in Figma?'",
-        "- If the user chooses Figma, ask for the Craft Bridge session ID if it is not already present.",
+        "- If the user chooses Figma and no session ID is provided, call figma_list_sessions(). If exactly one active session exists, use it automatically without asking the user to copy/paste anything.",
+        "- If the user chooses Figma and multiple active sessions exist, ask the user which file/plugin session to use.",
         "- Before calling start_craft for a Figma workflow, call figma_check_session(session_id).",
-        "- If the bridge/session is not available or the check fails, tell the user to open the Craft Bridge plugin in Figma, wait for 'Bridge connected', and copy the visible session ID.",
+        "- If the bridge/session is not available or the check fails, tell the user to open the Craft Bridge plugin in Figma and wait for 'Bridge connected'. Then call figma_list_sessions() again. Only ask for a visible session ID if multiple sessions remain ambiguous.",
         "- Only after the Figma session is confirmed should you call start_craft({ ..., renderer: 'figma', figma_session_id: '<id>' }).",
-        "- If rendering in Figma, never stop at code output. Use figma_get_context, figma_prepare_plan, and figma_wait_for_result to render through the plugin.",
+        "- If rendering in Figma, never stop at code output. Use figma_get_context and figma_render_tree when render_tree is available.",
+        "- Only fall back to figma_render_block or figma_prepare_plan for transitional or debugging flows.",
         "",
         "## Questioning style (applies to every phase that asks questions)",
         "- Ask one question at a time using the host's input UI — never present a numbered list.",
@@ -64,6 +72,7 @@ server.prompt("craft", "Start or resume a block-by-block design workflow", () =>
         "7. When continue_craft returns design_md_patch, write it to DESIGN.md immediately.",
         "8. When continue_craft returns craft_context (phase: ready), state your execution intent in one sentence, then execute.",
         "   If craft_context.existing_components is present, reuse those components — do not rebuild them.",
+        "   If render_tree is present and renderer is Figma, figma_render_tree is the primary execution path.",
         "9. After execution, call validate_design with a plain-language description of what you built.",
         "10. If validation fails, address failures before showing output to the user.",
       ].join("\n"),

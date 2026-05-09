@@ -44,6 +44,160 @@ const PluginSpecSchema = z.object({
   existing_components: z.array(z.string()).optional(),
 })
 
+const RenderIntentSchema = z.object({
+  artifact_name: z.string(),
+  renderer: z.enum(["figma", "code"]),
+  surface_kind: z.enum(["marketing", "application", "settings", "dashboard", "auth", "content", "custom"]),
+  target_context: z.object({
+    target_node_id: z.string().optional(),
+    selection_name: z.string().optional(),
+    file_session_id: z.string().optional(),
+  }).optional(),
+  content: z.object({
+    block_tree: z.array(z.object({
+      id: z.string(),
+      kind: z.string(),
+      purpose: z.string(),
+      content: z.record(z.union([z.string(), z.array(z.string())])).optional(),
+      children: z.array(z.string()).optional(),
+    })),
+    primary_action: z.string().optional(),
+  }),
+  style: z.object({
+    tone: z.string().optional(),
+    density: z.enum(["compact", "balanced", "spacious"]).optional(),
+    platform: z.enum(["web", "mobile", "both"]).optional(),
+  }),
+  design_system: z.object({
+    source: z.literal("craft"),
+    tokens: z.array(z.string()),
+    component_preferences: z.array(z.string()),
+    anti_patterns: z.array(z.string()),
+  }),
+  execution: z.object({
+    auto_run: z.boolean(),
+    reuse_existing_assets: z.boolean(),
+    materialize_missing_assets: z.boolean(),
+    persist_generated_assets: z.boolean(),
+  }),
+})
+
+const RenderBlockPlanSchema = z.object({
+  artifact_name: z.string(),
+  asset_section_name: z.string(),
+  block: z.string(),
+  goal: z.string(),
+  platform: z.enum(["web", "mobile", "both"]),
+  mode: z.enum(["free", "structured"]),
+  layout: z.enum(["hero", "navigation", "feedback-bar", "pricing", "feature-grid", "kpi-summary", "data-table", "sidebar", "form", "empty-state", "footer", "toolbar", "accordion", "generic"]),
+  direction: z.object({
+    id: z.string(),
+    name: z.string(),
+    design_system: z.string(),
+  }),
+  tokens: DesignSystemTokensSchema,
+  style: z.object({
+    primary: z.string(),
+    bg: z.string(),
+    surface: z.string(),
+    text: z.string(),
+    muted: z.string(),
+    border: z.string(),
+    accent: z.string().optional(),
+  }),
+  content: z.object({
+    eyebrow: z.string().optional(),
+    title: z.string().optional(),
+    body: z.string().optional(),
+    cta_label: z.string().optional(),
+    secondary_cta_label: z.string().optional(),
+    stats: z.array(z.object({
+      label: z.string(),
+      value: z.string(),
+      delta: z.string().optional(),
+    })).optional(),
+    items: z.array(z.object({
+      title: z.string(),
+      body: z.string().optional(),
+      badge: z.string().optional(),
+      meta: z.string().optional(),
+    })).optional(),
+    columns: z.array(z.object({
+      title: z.string(),
+      price: z.string().optional(),
+      body: z.string().optional(),
+      cta_label: z.string().optional(),
+      featured: z.boolean().optional(),
+      bullets: z.array(z.string()).optional(),
+    })).optional(),
+    links: z.array(z.string()).optional(),
+  }),
+})
+
+const RenderTextRoleSchema = z.enum(["display", "headline", "subheadline", "body", "label", "caption"])
+
+const RenderTreeNodeSchema: z.ZodTypeAny = z.lazy(() =>
+  z.discriminatedUnion("kind", [
+    z.object({
+      kind: z.literal("stack"),
+      name: z.string(),
+      direction: z.enum(["VERTICAL", "HORIZONTAL"]),
+      gap: z.number().optional(),
+      padding: z.number().optional(),
+      width: z.number().optional(),
+      min_height: z.number().optional(),
+      fill: z.string().optional(),
+      stroke: z.string().optional(),
+      radius: z.number().optional(),
+      align: z.enum(["MIN", "CENTER", "SPACE_BETWEEN"]).optional(),
+      children: z.array(RenderTreeNodeSchema),
+    }),
+    z.object({
+      kind: z.literal("text"),
+      text: z.string(),
+      role: RenderTextRoleSchema,
+      color: z.string().optional(),
+      max_width: z.number().optional(),
+      align: z.enum(["LEFT", "CENTER"]).optional(),
+    }),
+    z.object({
+      kind: z.literal("button"),
+      label: z.string(),
+      variant: z.enum(["primary", "secondary", "ghost"]),
+    }),
+    z.object({
+      kind: z.literal("badge"),
+      label: z.string(),
+    }),
+    z.object({
+      kind: z.literal("divider"),
+    }),
+    z.object({
+      kind: z.literal("spacer"),
+      size: z.number(),
+    }),
+  ])
+)
+
+const RenderTreePlanSchema = z.object({
+  artifact_name: z.string(),
+  asset_section_name: z.string(),
+  goal: z.string(),
+  block: z.string(),
+  platform: z.enum(["web", "mobile", "both"]),
+  tokens: DesignSystemTokensSchema,
+  palette: z.object({
+    primary: z.string(),
+    bg: z.string(),
+    surface: z.string(),
+    text: z.string(),
+    muted: z.string(),
+    border: z.string(),
+    accent: z.string().optional(),
+  }),
+  root: RenderTreeNodeSchema,
+})
+
 export const AgentOpSchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("get_context") }),
   z.object({
@@ -79,9 +233,18 @@ export const AgentOpSchema = z.discriminatedUnion("op", [
     text: z.string(),
   }),
   z.object({
+    op: z.literal("render_block"),
+    plan: RenderBlockPlanSchema,
+  }),
+  z.object({
+    op: z.literal("render_tree"),
+    plan: RenderTreePlanSchema,
+  }),
+  z.object({
     op: z.literal("scaffold_block"),
     spec: PluginSpecSchema,
   }),
 ])
 
 export const AgentOpArraySchema = z.array(AgentOpSchema).min(1)
+export const RenderIntentInputSchema = RenderIntentSchema
