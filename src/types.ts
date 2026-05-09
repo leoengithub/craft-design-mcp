@@ -14,6 +14,10 @@ export interface CraftWorkflowState {
   goal: string
   block_plan: Array<{ block: string; status: BlockStatus }>
   current_block?: string
+  execution?: {
+    renderer?: "code" | "figma"
+    figma_session_id?: string
+  }
   project_context?: {
     audience?: string
     tone?: string
@@ -65,6 +69,7 @@ export interface DesignSystemTokens {
 export interface CraftContext {
   block: string
   parent_goal: string
+  mode?: "free" | "structured"
   brief: {
     primary_action: string
     audience?: string
@@ -128,3 +133,49 @@ export interface ContinueCraftOutput {
   resume_prompt?: string
   hint: string
 }
+
+export interface DetectedLanguage {
+  colors: Record<string, string>
+  typography: {
+    body?: { family: string; size: number; weight: number }
+    label?: { family: string; size: number; weight: number }
+    display?: { family: string; size: number; weight: number }
+  }
+  spacing: { gap?: number; padding_h?: number; padding_v?: number }
+  radius: Record<string, number>
+  components_present: string[]
+  target_node?: { id: string; name: string; type: string; child_count?: number }
+}
+
+export type AgentOp =
+  | { op: "get_context" }
+  | { op: "create_frame"; name: string; width: number; height: number; direction?: "HORIZONTAL" | "VERTICAL" | "NONE"; padding?: number; gap?: number; fill?: string; x?: number; y?: number }
+  | { op: "create_text"; text: string; fontSize?: number; fontWeight?: "Regular" | "Medium" | "SemiBold"; fill?: string; parentId?: string; x?: number; y?: number }
+  | { op: "apply_fill"; nodeId: string; hex: string }
+  | { op: "set_text"; nodeId: string; text: string }
+  | { op: "scaffold_block"; spec: PluginSpec }
+
+export interface OpResult {
+  success: boolean
+  nodeId?: string
+  context?: DetectedLanguage
+  message?: string
+}
+
+export type AgentRequestType = "get_context" | "execute_op" | "execute_plan"
+
+export type AgentRequestPayload =
+  | {}
+  | { op: AgentOp }
+  | { description: string; ops: AgentOp[] }
+
+export interface AgentRequestEnvelope {
+  request_id: string
+  type: AgentRequestType
+  payload: AgentRequestPayload
+}
+
+export type AgentResultEnvelope =
+  | { type: "context"; success: boolean; data?: DetectedLanguage; message?: string }
+  | { type: "op"; data: OpResult }
+  | { type: "plan"; approved: boolean; results?: OpResult[]; message?: string }

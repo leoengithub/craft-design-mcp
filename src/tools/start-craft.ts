@@ -17,13 +17,15 @@ export function registerStartCraft(server: McpServer) {
       design_md:    z.string().optional().describe("Raw DESIGN.md contents if resuming"),
       components_md: z.string().optional().describe("Raw COMPONENTS.md contents if present in project root"),
       craft_ds_md:  z.string().optional().describe("Raw craft-ds.md contents if present in project root"),
+      renderer:     z.enum(["code", "figma"]).optional().describe("Preferred execution renderer"),
+      figma_session_id: z.string().optional().describe("Craft Bridge Figma session ID when rendering into Figma"),
     },
-    async ({ goal, design_md, components_md, craft_ds_md }) => {
+    async ({ goal, design_md, components_md, craft_ds_md, renderer, figma_session_id }) => {
       const existingComponents = components_md ? parseComponentsMd(components_md) : undefined
       const customSystem = craft_ds_md ? await parseCraftDsMd(craft_ds_md) : undefined
 
       if (design_md) {
-        const state = parseDesignMd(design_md, goal, existingComponents, customSystem)
+        const state = parseDesignMd(design_md, goal, existingComponents, customSystem, renderer, figma_session_id)
         const currentBlock = state.block_plan.find(b => b.status === "current" || b.status === "pending")
         if (!currentBlock) {
           return {
@@ -59,12 +61,16 @@ export function registerStartCraft(server: McpServer) {
         block_plan: inferBlockPlan(goal),
         block_definitions: {},
         design_md: "",
+        execution: renderer ? { renderer, figma_session_id } : undefined,
         existing_components: existingComponents,
         custom_design_system: customSystem,
       }
 
       const brandNote = customSystem ? " craft-ds.md was loaded — 'Your Brand' will appear as a direction option." : ""
       const componentsNote = existingComponents?.length ? ` ${existingComponents.length} existing components found in COMPONENTS.md — reuse them instead of rebuilding.` : ""
+      const figmaNote = renderer === "figma" && figma_session_id
+        ? ` Figma renderer is locked to session "${figma_session_id}" — use figma_get_context before execution, and render via figma_prepare_plan/figma_wait_for_result instead of generating code.`
+        : ""
       const hasKnownBlocks = state.block_plan.length > 0
       const screensInstruction = !hasKnownBlocks
         ? ` Also determine the main screens or components to design (e.g. "rule editor, user list, empty state") and include them as the last answer — they will become the block plan.`
@@ -81,7 +87,7 @@ export function registerStartCraft(server: McpServer) {
               `Good questions for this phase establish: who uses this and what's their job-to-be-done in this flow; what a successful interaction looks like (primary action / outcome); any hard constraints from the existing system or data model.`,
               `Do NOT ask generic questions like "who is the audience" or "what's the tone" — derive those from the goal and codebase. Only ask what you genuinely can't infer.`,
               `Ask one at a time via chat — one at a time. Propose your own recommendation before waiting.`,
-              `Once context is established, call continue_craft({ state, action: { type: 'answer_project_questions', answers: [context_summary, primary_success_criteria, constraints_or_tone${!hasKnownBlocks ? ", screens_list" : ""}] } }).${screensInstruction}${brandNote}${componentsNote}`,
+              `Once context is established, call continue_craft({ state, action: { type: 'answer_project_questions', answers: [context_summary, primary_success_criteria, constraints_or_tone${!hasKnownBlocks ? ", screens_list" : ""}] } }).${screensInstruction}${brandNote}${componentsNote}${figmaNote}`,
             ].join(" "),
           }),
         }],
@@ -120,6 +126,8 @@ export function parseDesignMd(
   goal: string,
   existingComponents?: string[],
   customSystem?: CraftWorkflowState["custom_design_system"],
+  renderer?: "code" | "figma",
+  figma_session_id?: string,
 ): CraftWorkflowState {
   const parsedGoal = parseGoal(content) ?? (goal === "resume" ? "resume" : goal)
   const headingEvents = [...content.matchAll(/###\s+(.+?)\s+(✅|🔄)/g)].map(m => ({
@@ -161,6 +169,7 @@ export function parseDesignMd(
     goal: parsedGoal,
     block_plan: blockPlan,
     current_block: currentBlock,
+    execution: renderer ? { renderer, figma_session_id } : undefined,
     direction: directionName && systemName ? {
       id: directionIdFromName(directionName, systemName),
       name: directionName,

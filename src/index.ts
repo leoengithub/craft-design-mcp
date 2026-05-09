@@ -5,6 +5,12 @@ import { registerContinueCraft } from "./tools/continue-craft.js"
 import { registerValidateDesign } from "./tools/validate-design.js"
 import { registerListSkills } from "./tools/list-skills.js"
 import { registerListDesignSystems } from "./tools/list-design-systems.js"
+import { registerFigmaGetContext } from "./tools/figma-get-context.js"
+import { registerFigmaCheckSession } from "./tools/figma-check-session.js"
+import { registerFigmaExecuteOp } from "./tools/figma-execute-op.js"
+import { registerFigmaPreparePlan } from "./tools/figma-prepare-plan.js"
+import { registerFigmaWaitForResult } from "./tools/figma-wait-for-result.js"
+import { startHttpServer } from "./http/server.js"
 
 const server = new McpServer({
   name: "craft-design-mcp",
@@ -16,6 +22,11 @@ registerContinueCraft(server)
 registerValidateDesign(server)
 registerListSkills(server)
 registerListDesignSystems(server)
+registerFigmaCheckSession(server)
+registerFigmaGetContext(server)
+registerFigmaExecuteOp(server)
+registerFigmaPreparePlan(server)
+registerFigmaWaitForResult(server)
 
 server.prompt("craft", "Start or resume a block-by-block design workflow", () => ({
   messages: [{
@@ -24,6 +35,14 @@ server.prompt("craft", "Start or resume a block-by-block design workflow", () =>
       type: "text",
       text: [
         "You are running the craft-design-mcp workflow.",
+        "",
+        "## Renderer selection",
+        "- Before starting the workflow, ask this exact question when renderer is not already explicit: 'Do you want this in the code or in Figma?'",
+        "- If the user chooses Figma, ask for the Craft Bridge session ID if it is not already present.",
+        "- Before calling start_craft for a Figma workflow, call figma_check_session(session_id).",
+        "- If the bridge/session is not available or the check fails, tell the user to open the Craft Bridge plugin in Figma, wait for 'Bridge connected', and copy the visible session ID.",
+        "- Only after the Figma session is confirmed should you call start_craft({ ..., renderer: 'figma', figma_session_id: '<id>' }).",
+        "- If rendering in Figma, never stop at code output. Use figma_get_context, figma_prepare_plan, and figma_wait_for_result to render through the plugin.",
         "",
         "## Questioning style (applies to every phase that asks questions)",
         "- Ask one question at a time using the host's input UI — never present a numbered list.",
@@ -39,8 +58,8 @@ server.prompt("craft", "Start or resume a block-by-block design workflow", () =>
         "1. Check if DESIGN.md exists in the project root.",
         "2. Check if COMPONENTS.md exists in the project root. If it does, read it.",
         "3. Check if craft-ds.md exists in the project root. If it does, read it.",
-        "4. If DESIGN.md exists: call start_craft({ goal: 'resume', design_md: <contents>, components_md?: <contents>, craft_ds_md?: <contents> }).",
-        "5. If DESIGN.md does not exist: ask the user what they want to design, then call start_craft({ goal: <answer>, components_md?: <contents>, craft_ds_md?: <contents> }).",
+        "4. If DESIGN.md exists: call start_craft({ goal: 'resume', design_md: <contents>, components_md?: <contents>, craft_ds_md?: <contents>, renderer?: 'code'|'figma', figma_session_id?: <id> }).",
+        "5. If DESIGN.md does not exist: ask the user what they want to design, then call start_craft({ goal: <answer>, components_md?: <contents>, craft_ds_md?: <contents>, renderer?: 'code'|'figma', figma_session_id?: <id> }).",
         "6. Store the state returned by every tool call and pass it forward to every continue_craft call.",
         "7. When continue_craft returns design_md_patch, write it to DESIGN.md immediately.",
         "8. When continue_craft returns craft_context (phase: ready), state your execution intent in one sentence, then execute.",
@@ -148,3 +167,6 @@ server.prompt("craft-setup", "Scaffold craft-ds.md and COMPONENTS.md from your e
 
 const transport = new StdioServerTransport()
 await server.connect(transport)
+await startHttpServer().catch((error) => {
+  console.error("HTTP bridge failed:", error)
+})

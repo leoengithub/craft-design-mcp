@@ -19,6 +19,10 @@ const StateSchema = z.object({
   goal: z.string(),
   block_plan: z.array(z.object({ block: z.string(), status: z.enum(["pending", "current", "completed"]) })),
   current_block: z.string().optional(),
+  execution: z.object({
+    renderer: z.enum(["code", "figma"]).optional(),
+    figma_session_id: z.string().optional(),
+  }).optional(),
   project_context: z.object({
     audience: z.string().optional(),
     tone: z.string().optional(),
@@ -240,13 +244,7 @@ export async function advance(state: CraftWorkflowState, action: z.infer<typeof 
         craft_context: craftContext,
         plugin_spec: pluginSpec,
         design_md_patch: patch,
-        hint: [
-          `Mode is "${mode}" — ${mode === "structured" ? "use auto-layout frames and instance components by node ID if Craft Bridge has run setup" : "use free placement for creative composition"}.`,
-          `State your execution intent in one sentence, then execute using the available execution tool.`,
-          `After execution, call validate_design({ description: "<what you built>", craft_context }).`,
-          `Do not show output that fails validation — fix violations first.`,
-          `plugin_spec is provided for the Craft Bridge Figma plugin if the user prefers to render via plugin instead of agent.`,
-        ].join(" "),
+        hint: buildExecutionHint(next, mode),
       }
     }
 
@@ -304,6 +302,31 @@ export async function advance(state: CraftWorkflowState, action: z.infer<typeof 
       }
     }
   }
+}
+
+function buildExecutionHint(state: CraftWorkflowState, mode: "free" | "structured"): string {
+  const base = [
+    `Mode is "${mode}" — ${mode === "structured" ? "use auto-layout frames and instance components by node ID if Craft Bridge has run setup" : "use free placement for creative composition"}.`,
+    `After execution, call validate_design({ description: "<what you built>", craft_context }).`,
+    `Do not show output that fails validation — fix violations first.`,
+  ]
+
+  if (state.execution?.renderer === "figma" && state.execution.figma_session_id) {
+    return [
+      ...base,
+      `State your execution intent in one sentence, then render into Figma session "${state.execution.figma_session_id}".`,
+      `Call figma_get_context(session_id) first if you need the current file state or selected node.`,
+      `Then queue the render via figma_prepare_plan({ session_id: "${state.execution.figma_session_id}", description: "<plan preview>", ops: [...] }) and wait with figma_wait_for_result.`,
+      `Do not generate React, HTML, or CSS when the renderer is Figma — the plugin is the execution surface.`,
+      `plugin_spec is provided as a structured fallback if you need to scaffold a block with Craft Bridge semantics.`,
+    ].join(" ")
+  }
+
+  return [
+    ...base,
+    `State your execution intent in one sentence, then execute using the available execution tool.`,
+    `plugin_spec is provided for the Craft Bridge Figma plugin if the user prefers to render via plugin instead of agent.`,
+  ].join(" ")
 }
 
 function appendDesignMd(existing: string, addition: string): string {
