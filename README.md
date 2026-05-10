@@ -302,6 +302,7 @@ On the Figma side, the plugin should:
 - materialize and reuse local text styles per design system and text role
 - apply those styles instead of leaving typography as ad hoc node settings
 - keep the bridge deterministic while the MCP owns taste and semantic selection
+- use an explicit `Connect` / `Disconnect` handshake to bind the plugin to the current MCP instance instead of auto-connecting to any stale local bridge listener
 
 The bridge should stay a deterministic executor. Taste and discipline are enforced on the MCP side.
 

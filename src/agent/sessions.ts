@@ -164,6 +164,12 @@ export function touchSession(sessionId: string): void {
   session.lastSeenAt = Date.now()
 }
 
+export function disconnectSession(sessionId: string): void {
+  const session = sessions.get(sessionId)
+  if (!session) return
+  session.lastSeenAt = 0
+}
+
 export function listActiveSessions(): Array<{ session_id: string; pending_count: number; last_seen_at: number }> {
   const now = Date.now()
   const items: Array<{ session_id: string; pending_count: number; last_seen_at: number }> = []
