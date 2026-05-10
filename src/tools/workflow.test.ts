@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import type { CraftWorkflowState } from "../types.js"
 import { loadSkill } from "../skills/loader.js"
 import { advance } from "./continue-craft.js"
-import { parseDesignMd } from "./start-craft.js"
+import { goalsClearlyDiffer, parseDesignMd } from "./start-craft.js"
 import { checkP0Rule } from "./validate-design.js"
 
 describe("craft workflow", () => {
@@ -99,6 +99,11 @@ describe("craft workflow", () => {
     await expect(loadSkill("hero-section")).resolves.toMatchObject({
       block_type: "hero-section",
     })
+  })
+
+  it("detects when DESIGN.md belongs to an unrelated goal", () => {
+    expect(goalsClearlyDiffer("Toolbar for a dashboard", "Team card for an about page")).toBe(true)
+    expect(goalsClearlyDiffer("Pricing page for a SaaS", "Landing page pricing tiers")).toBe(false)
   })
 })
 

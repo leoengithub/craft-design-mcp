@@ -1,0 +1,10 @@
+{
+  "block_type": "form",
+  "root_component_id": "surface.card",
+  "preferred_components": ["field.text", "button.primary", "surface.card"],
+  "required_components": ["field.text"],
+  "critique_rules": [
+    "Use semantic text fields for repeated form inputs.",
+    "Primary submit action should resolve to a semantic primary button."
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "block_type": "hero-section",
+  "root_component_id": "hero.section",
+  "preferred_components": ["hero.section", "button.primary", "surface.card"],
+  "required_components": ["hero.section", "button.primary"],
+  "critique_rules": [
+    "The hero must resolve to a semantic hero section instead of a generic vertical stack.",
+    "Use a dominant headline and one primary action."
+  ]
+}

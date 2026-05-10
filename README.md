@@ -2,7 +2,7 @@
 
 **Block-level design intelligence for AI coding agents.**
 
-craft-design-mcp is a Model Context Protocol server that gives agents like Claude Code and Cursor a structured design thinking layer before they touch any code. It doesn't generate designs — it makes the agent think like a designer first.
+craft-design-mcp is a Model Context Protocol server that gives agents like Claude Code and Cursor a structured design thinking layer before they touch any code. It now also acts as the design brain for Craft Bridge: the MCP resolves semantic components, runs critique and pre-render lint, and sends a disciplined payload to Figma instead of leaving layout taste to the host agent.
 
 ---
 
@@ -16,6 +16,7 @@ craft-design-mcp fixes this by forcing a structured brief before execution:
 - **Questions before pixels.** The agent collects audience, tone, and block-specific intent before it designs anything.
 - **Constraints, not suggestions.** Each block type carries a contract: required elements, layout rules, anti-patterns, and hard P0 checks. The agent validates its own output before showing it to you.
 - **Determinism over improvisation.** A bounded design system token set (colors, typography, spacing) replaces freestyle improvisation.
+- **Canonical execution.** Once a block reaches `ready`, the agent is expected to call `execute_craft_ready`. That recomputes the semantic `render_tree`, applies critique and preflight lint, then dispatches the canonical renderer path.
 
 ---
 
@@ -43,7 +44,7 @@ craft-design-mcp fixes this by forcing a structured brief before execution:
   └─ You approve → DESIGN.md is written → run /craft again for the next block
 ```
 
-State is written to `DESIGN.md` in your project root after each block. Resuming a half-finished design is a single `/craft` invocation — no re-explaining.
+State is written to `DESIGN.md` in your project root after each block. Resuming a half-finished design is a single `/craft` invocation — no re-explaining. If `DESIGN.md` clearly belongs to a different goal than the current request, Craft restarts cleanly instead of muddying the active block state.
 
 ---
 
@@ -99,7 +100,7 @@ pnpm build
 /craft   ← resumes from DESIGN.md if one exists
 ```
 
-The agent detects `DESIGN.md`, `COMPONENTS.md`, and `craft-ds.md` in your project root automatically. Pass them to `start_craft` when invoking manually.
+The agent detects `DESIGN.md`, `COMPONENTS.md`, `craft-components.json`, and `craft-ds.md` in your project root automatically. Pass them to `start_craft` when invoking manually.
 
 ### `/craft-setup` — scaffold your brand tokens
 
@@ -108,6 +109,7 @@ Run this once in a project that already has a design system. The agent will:
 1. Read your Tailwind config, CSS variables, or theme file
 2. Extract colors, typography, and spacing into `craft-ds.md`
 3. Scan your components folder and list reusable components in `COMPONENTS.md`
+4. Generate semantic mappings for those components in `craft-components.json`
 
 After setup, `/craft` will offer **Your Brand** as a fourth direction option and reuse existing components instead of rebuilding them.
 
@@ -224,6 +226,32 @@ Drop a `COMPONENTS.md` in your project root (or let `/craft-setup` generate it):
 
 The agent reads this on every `/craft` invocation and passes the component list to `craft_context`. It will reference these instead of building from scratch.
 
+### Semantic component mappings
+
+Drop a `craft-components.json` in your project root (or let `/craft-setup` generate it):
+
+```json
+{
+  "components": [
+    {
+      "component_name": "Button",
+      "source_path": "src/components/Button.tsx",
+      "semantic_component_id": "button.primary",
+      "variants": ["primary", "secondary"],
+      "states": ["default"]
+    }
+  ]
+}
+```
+
+This is the machine-readable bridge from your codebase library into the Craft semantic catalog. During resolution, Craft prefers:
+
+1. project component mappings from `craft-components.json`
+2. shipped Craft design system manifests
+3. local reusable Figma components
+4. materialized local Craft components
+5. primitive fallback
+
 ---
 
 ## Extending the library
@@ -231,20 +259,42 @@ The agent reads this on every `/craft` invocation and passes the component list 
 ### Adding a skill
 
 1. Create `skills/<block-type>/SKILL.md` following the format in any existing skill
-2. Fill all 8 sections: Purpose, Required elements, Layout rules, Component patterns, Anti-patterns, Self-critique checklist, Example prompts
-3. Include at least 5 anti-patterns and 2 P0 checks
-4. Restart the MCP server — the skill is immediately available
+2. Create `skills/<block-type>/manifest.json` with semantic component preferences, required components, and critique rules
+3. Fill all 8 sections: Purpose, Required elements, Layout rules, Component patterns, Anti-patterns, Self-critique checklist, Example prompts
+4. Include at least 5 anti-patterns and 2 P0 checks
+5. Restart the MCP server — the skill is immediately available
 
 No code changes required.
 
 ### Adding a design system
 
 1. Create `design-systems/<name>.md` following the format in any existing system
-2. Fill all 9 sections: Color (token table), Typography (role table + Typeface line), Spacing, Layout, Components, Motion, Voice, Brand, Anti-patterns
-3. Set `direction_fit` to one or more of: `focused-calm`, `warm-editorial`, `data-dense-pro`
-4. Restart the MCP server
+2. Create `design-systems/<name>.manifest.json` with component metadata and critique rules
+3. Fill all 9 sections: Color (token table), Typography (role table + Typeface line), Spacing, Layout, Components, Motion, Voice, Brand, Anti-patterns
+4. Set `direction_fit` to one or more of: `focused-calm`, `warm-editorial`, `data-dense-pro`
+5. Restart the MCP server
 
 No code changes required.
+
+---
+
+## Craft Bridge execution
+
+For Figma workflows, `/craft` should not improvise renderer steps. The intended flow is:
+
+1. `start_craft(...)`
+2. repeated `continue_craft(...)`
+3. once `phase === "ready"`, call `execute_craft_ready({ state })`
+
+`execute_craft_ready` is the canonical Craft execution contract. It:
+
+- rebuilds `craft_context`, `render_intent`, and the semantic `render_tree`
+- resolves semantic nodes against your project mappings and Craft manifests
+- runs critique rules from the selected skill and design system
+- runs pre-render lint, including token validity and text contrast checks
+- dispatches the primary renderer path (`render_tree` for Figma)
+
+The bridge should stay a deterministic executor. Taste and discipline are enforced on the MCP side.
 
 ---
 

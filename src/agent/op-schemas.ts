@@ -135,6 +135,27 @@ const RenderBlockPlanSchema = z.object({
 })
 
 const RenderTextRoleSchema = z.enum(["display", "headline", "subheadline", "body", "label", "caption"])
+const ResolutionSourceSchema = z.enum(["codebase", "craft_ds", "local_figma", "materialized_local", "primitive"])
+
+const SemanticNodeSchema = z.object({
+  component_id: z.string(),
+  variant: z.string().optional(),
+  state: z.string().optional(),
+  slots: z.record(z.string()).optional(),
+  token_overrides: z.record(z.string()).optional(),
+  resolution_target: z.enum(["codebase", "design_system", "auto"]).optional(),
+  allow_fallback: z.boolean().optional(),
+}).optional()
+
+const ResolvedComponentSchema = z.object({
+  semantic_component_id: z.string(),
+  source: ResolutionSourceSchema,
+  target_name: z.string(),
+  variant: z.string().optional(),
+  state: z.string().optional(),
+  mapping_name: z.string().optional(),
+  allow_fallback: z.boolean(),
+}).optional()
 
 const RenderTreeNodeSchema: z.ZodTypeAny = z.lazy(() =>
   z.discriminatedUnion("kind", [
@@ -151,6 +172,8 @@ const RenderTreeNodeSchema: z.ZodTypeAny = z.lazy(() =>
       radius: z.number().optional(),
       align: z.enum(["MIN", "CENTER", "SPACE_BETWEEN"]).optional(),
       children: z.array(RenderTreeNodeSchema),
+      semantic: SemanticNodeSchema,
+      resolution: ResolvedComponentSchema,
     }),
     z.object({
       kind: z.literal("text"),
@@ -159,22 +182,32 @@ const RenderTreeNodeSchema: z.ZodTypeAny = z.lazy(() =>
       color: z.string().optional(),
       max_width: z.number().optional(),
       align: z.enum(["LEFT", "CENTER"]).optional(),
+      semantic: SemanticNodeSchema,
+      resolution: ResolvedComponentSchema,
     }),
     z.object({
       kind: z.literal("button"),
       label: z.string(),
       variant: z.enum(["primary", "secondary", "ghost"]),
+      semantic: SemanticNodeSchema,
+      resolution: ResolvedComponentSchema,
     }),
     z.object({
       kind: z.literal("badge"),
       label: z.string(),
+      semantic: SemanticNodeSchema,
+      resolution: ResolvedComponentSchema,
     }),
     z.object({
       kind: z.literal("divider"),
+      semantic: SemanticNodeSchema,
+      resolution: ResolvedComponentSchema,
     }),
     z.object({
       kind: z.literal("spacer"),
       size: z.number(),
+      semantic: SemanticNodeSchema,
+      resolution: ResolvedComponentSchema,
     }),
   ])
 )

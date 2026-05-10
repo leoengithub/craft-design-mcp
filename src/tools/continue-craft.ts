@@ -1,11 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 import type { CraftWorkflowState, ContinueCraftOutput, Direction } from "../types.js"
-import { loadSkill } from "../skills/loader.js"
-import { loadDesignSystem } from "../design-systems/loader.js"
-import { buildRenderIntent } from "../agent/render-intent.js"
-import { buildRenderBlockPlan } from "../agent/render-plan.js"
-import { buildRenderTreePlan } from "../agent/render-tree.js"
+import { prepareReadyArtifacts } from "../agent/prepare-ready.js"
 
 const ActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("answer_project_questions"), answers: z.array(z.string()) }),
@@ -43,6 +39,15 @@ const StateSchema = z.object({
   })),
   design_md: z.string(),
   existing_components: z.array(z.string()).optional(),
+  component_mappings: z.array(z.object({
+    component_name: z.string(),
+    source_path: z.string().optional(),
+    semantic_component_id: z.string(),
+    variants: z.array(z.string()).optional(),
+    states: z.array(z.string()).optional(),
+    prop_mapping: z.record(z.string()).optional(),
+    renderer_hints: z.array(z.string()).optional(),
+  })).optional(),
   custom_design_system: z.object({
     tokens: z.any().transform(v => v as import("../types.js").DesignSystemTokens),
     anti_patterns: z.array(z.string()),
@@ -183,77 +188,23 @@ export async function advance(state: CraftWorkflowState, action: z.infer<typeof 
           hint: "Choose a direction before requesting design.",
         }
       }
-      const skill = await loadSkill(block)
       const blockDef = state.block_definitions[block] ?? {}
 
-      // Use custom tokens if direction is "custom", otherwise load from disk
-      const designSystemName = state.direction.design_system
-      const system = designSystemName === "custom"
-        ? undefined
-        : await loadDesignSystem(designSystemName)
-      const tokens = designSystemName === "custom" && state.custom_design_system
-        ? state.custom_design_system.tokens
-        : system?.tokens ?? (await loadDesignSystem("linear")).tokens
-      const designSystemAntiPatterns = designSystemName === "custom"
-        ? state.custom_design_system?.anti_patterns ?? []
-        : system?.anti_patterns ?? []
-
-      // Infer layout mode from block type, direction, and goal
-      const mode = inferMode(state.goal, block, state.direction.id)
-
-      const craftContext = {
-        block,
-        parent_goal: state.goal,
-        mode,
-        brief: {
-          primary_action: blockDef.primary_action ?? "",
-          audience: state.project_context?.audience,
-          tone: state.project_context?.tone,
-          notes: blockDef.notes,
-        },
-        direction: state.direction!,
-        tokens,
-        constraints: {
-          layout_rules: skill.layout_rules,
-          component_patterns: skill.component_patterns,
-          anti_patterns: [
-            ...skill.anti_patterns,
-            ...designSystemAntiPatterns,
-          ],
-        },
-        design_md_snapshot: state.design_md,
-        existing_components: state.existing_components,
-      }
-
-      // plugin_spec: machine-readable version for Craft Bridge Figma plugin
-      const pluginSpec = {
-        version: "1" as const,
-        mode,
-        block,
-        goal: state.goal,
-        direction: state.direction,
-        tokens,
-        brief: craftContext.brief,
-        platform: state.project_context?.platform ?? "web",
-        constraints: craftContext.constraints,
-        existing_components: state.existing_components,
-      }
-
-      const renderIntent = buildRenderIntent(state, craftContext)
-      const renderPlan = buildRenderBlockPlan(state, craftContext)
-      const renderTree = buildRenderTreePlan(state, craftContext)
+      const prepared = await prepareReadyArtifacts(state)
       const patch = `\n### ${block} 🔄\n- Primary action: ${blockDef.primary_action}\n`
       const next: CraftWorkflowState = { ...state, phase: "ready", design_md: state.design_md + patch }
 
       return {
         state: next,
-        craft_context: craftContext,
-        plugin_spec: pluginSpec,
-        render_intent: renderIntent,
-        render_plan: renderPlan,
-        render_tree: renderTree,
+        craft_context: prepared.craftContext,
+        plugin_spec: prepared.pluginSpec,
+        render_intent: prepared.renderIntent,
+        render_plan: prepared.renderPlan,
+        render_tree: prepared.renderTree,
+        critique_findings: prepared.critiqueFindings,
+        preflight_findings: prepared.preflightFindings,
         design_md_patch: patch,
-        hint: buildExecutionHint(next, mode, renderIntent.artifact_name),
+        hint: buildExecutionHint(next, prepared.craftContext.mode ?? "structured", prepared.renderIntent.artifact_name),
       }
     }
 
@@ -324,14 +275,16 @@ function buildExecutionHint(state: CraftWorkflowState, mode: "free" | "structure
     return [
       ...base,
       `State your execution intent in one sentence, then render into Figma session "${state.execution.figma_session_id}".`,
-      `Call figma_get_context(session_id) first if you need the current file state or selected node.`,
-      `Prefer the provided render_tree. Call figma_render_tree({ session_id: "${state.execution.figma_session_id}", render_tree, render_intent }) for final rendering.`,
-      `Use render_plan only as a transitional fallback when render_tree is unavailable.`,
+      `Do not choose low-level renderer tools yourself. Call execute_craft_ready({ state }) as the canonical execution step.`,
+      `execute_craft_ready will recompute the disciplined Craft payload and dispatch the semantic render_tree through the bridge.`,
+      `Respect critique_findings and preflight_findings before execution. They are lint from Craft itself, not optional commentary.`,
+      `Only use figma_get_context, figma_render_tree, or figma_prepare_plan when you are explicitly debugging the execution path.`,
+      `render_tree is already semantically resolved. Preserve its semantic components and resolution targets instead of collapsing back to anonymous primitives.`,
       `Render a final-looking design, not a wireframe. Use real fills, spacing, hierarchy, surfaces, and interaction affordances from the selected design system tokens.`,
       `Use render_intent.artifact_name "${artifactName}" as the stable name for the rendered artifact and its sibling local asset section.`,
       `Do not use scaffold_block or placeholder slots unless the user explicitly asks for a scaffold.`,
       `Do not generate React, HTML, or CSS when the renderer is Figma — the plugin is the execution surface.`,
-      `render_tree is the primary Figma execution contract. render_intent is for execution context. figma_render_block, figma_execute_op, and figma_prepare_plan are fallback or debugging paths, not normal design rendering.`,
+      `execute_craft_ready is the primary Craft execution contract. render_tree is the primary Figma payload under that contract. figma_render_block, figma_execute_op, and figma_prepare_plan are fallback or debugging paths, not normal design rendering.`,
     ].join(" ")
   }
 
@@ -369,27 +322,6 @@ function buildPreview(block: string, primaryAction: string, directionName: strin
       `Side-by-side pricing tiers. One visually elevated as recommended. Price is the dominant text in each card. Single CTA per tier: "${action}". ${dir} feel.`,
   }
   return previews[block]?.(primaryAction, directionName) ?? `A ${block} block designed for: ${primaryAction}.`
-}
-
-// Infers layout mode from goal, block type, and direction — never asks the user.
-// "structured" = auto-layout + component instances (default, safer)
-// "free" = absolute positioning, creative composition
-export function inferMode(goal: string, blockType: string, directionId: string): "free" | "structured" {
-  // Structural blocks are always structured
-  const structuredBlocks = [
-    "data-table", "form", "sidebar", "navigation", "kpi-summary",
-    "onboarding-step", "bottom-navigation", "mobile-screen-header", "footer", "modal",
-  ]
-  if (structuredBlocks.includes(blockType)) return "structured"
-
-  // Data-dense direction always structured
-  if (directionId === "data-dense-pro") return "structured"
-
-  // Goal signals explicit creative intent → free
-  if (/\b(creative|campaign|editorial|portfolio|illustration|artistic|expressive|branding|magazine)\b/i.test(goal)) return "free"
-
-  // Default: structured (safer, more consistent across environments)
-  return "structured"
 }
 
 // Ranks the 3 built-in directions based on brief signals. Prepends custom direction if present.

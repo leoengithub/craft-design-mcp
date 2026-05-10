@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { registerStartCraft } from "./tools/start-craft.js"
 import { registerContinueCraft } from "./tools/continue-craft.js"
+import { registerExecuteCraftReady } from "./tools/execute-craft-ready.js"
 import { registerValidateDesign } from "./tools/validate-design.js"
 import { registerListSkills } from "./tools/list-skills.js"
 import { registerListDesignSystems } from "./tools/list-design-systems.js"
@@ -22,6 +23,7 @@ const server = new McpServer({
 
 registerStartCraft(server)
 registerContinueCraft(server)
+registerExecuteCraftReady(server)
 registerValidateDesign(server)
 registerListSkills(server)
 registerListDesignSystems(server)
@@ -49,8 +51,10 @@ server.prompt("craft", "Start or resume a block-by-block design workflow", () =>
         "- Before calling start_craft for a Figma workflow, call figma_check_session(session_id).",
         "- If the bridge/session is not available or the check fails, tell the user to open the Craft Bridge plugin in Figma and wait for 'Bridge connected'. Then call figma_list_sessions() again. Only ask for a visible session ID if multiple sessions remain ambiguous.",
         "- Only after the Figma session is confirmed should you call start_craft({ ..., renderer: 'figma', figma_session_id: '<id>' }).",
-        "- If rendering in Figma, never stop at code output. Use figma_get_context and figma_render_tree when render_tree is available.",
-        "- Only fall back to figma_render_block or figma_prepare_plan for transitional or debugging flows.",
+        "- If rendering in Figma, never stop at code output.",
+        "- When the workflow reaches phase 'ready', call execute_craft_ready({ state }) as the canonical path.",
+        "- Do not choose renderer-specific tools yourself when execute_craft_ready can be used.",
+        "- Only fall back to figma_render_tree, figma_render_block, or figma_prepare_plan for debugging flows.",
         "",
         "## Questioning style (applies to every phase that asks questions)",
         "- Ask one question at a time using the host's input UI — never present a numbered list.",
@@ -65,30 +69,33 @@ server.prompt("craft", "Start or resume a block-by-block design workflow", () =>
         "## Workflow steps",
         "1. Check if DESIGN.md exists in the project root.",
         "2. Check if COMPONENTS.md exists in the project root. If it does, read it.",
-        "3. Check if craft-ds.md exists in the project root. If it does, read it.",
-        "4. If DESIGN.md exists: call start_craft({ goal: 'resume', design_md: <contents>, components_md?: <contents>, craft_ds_md?: <contents>, renderer?: 'code'|'figma', figma_session_id?: <id> }).",
-        "5. If DESIGN.md does not exist: ask the user what they want to design, then call start_craft({ goal: <answer>, components_md?: <contents>, craft_ds_md?: <contents>, renderer?: 'code'|'figma', figma_session_id?: <id> }).",
-        "6. Store the state returned by every tool call and pass it forward to every continue_craft call.",
-        "7. When continue_craft returns design_md_patch, write it to DESIGN.md immediately.",
-        "8. When continue_craft returns craft_context (phase: ready), state your execution intent in one sentence, then execute.",
+        "3. Check if craft-components.json exists in the project root. If it does, read it.",
+        "4. Check if craft-ds.md exists in the project root. If it does, read it.",
+        "5. If DESIGN.md exists and the user's request is still about the same design goal: call start_craft({ goal: 'resume', design_md: <contents>, components_md?: <contents>, craft_components_json?: <contents>, craft_ds_md?: <contents>, renderer?: 'code'|'figma', figma_session_id?: <id> }).",
+        "   If DESIGN.md exists but the user's request is clearly about a different goal or different block family, call start_craft with the new goal plus design_md so Craft can detect stale state and restart cleanly.",
+        "6. If DESIGN.md does not exist: ask the user what they want to design, then call start_craft({ goal: <answer>, components_md?: <contents>, craft_components_json?: <contents>, craft_ds_md?: <contents>, renderer?: 'code'|'figma', figma_session_id?: <id> }).",
+        "7. Store the state returned by every tool call and pass it forward to every continue_craft call.",
+        "8. When continue_craft returns design_md_patch, write it to DESIGN.md immediately.",
+        "9. When continue_craft returns craft_context (phase: ready), state your execution intent in one sentence, then call execute_craft_ready({ state }).",
         "   If craft_context.existing_components is present, reuse those components — do not rebuild them.",
-        "   If render_tree is present and renderer is Figma, figma_render_tree is the primary execution path.",
-        "9. After execution, call validate_design with a plain-language description of what you built.",
-        "10. If validation fails, address failures before showing output to the user.",
+        "   Do not improvise low-level Figma ops or custom renderer choices when execute_craft_ready is available.",
+        "10. After execution, call validate_design with a plain-language description of what you built.",
+        "11. If validation fails, address failures before showing output to the user.",
       ].join("\n"),
     },
   }],
 }))
 
-server.prompt("craft-setup", "Scaffold craft-ds.md and COMPONENTS.md from your existing codebase", () => ({
+server.prompt("craft-setup", "Scaffold craft-ds.md, COMPONENTS.md, and craft-components.json from your existing codebase", () => ({
   messages: [{
     role: "user",
     content: {
       type: "text",
       text: [
-        "You are running the craft-setup workflow. Your job is to generate two files in the project root:",
+        "You are running the craft-setup workflow. Your job is to generate three files in the project root:",
         "  1. craft-ds.md — the project's design token file for craft-design-mcp",
         "  2. COMPONENTS.md — a list of reusable components that already exist in this codebase",
+        "  3. craft-components.json — semantic mappings from project components into the Craft catalog",
         "",
         "## Step 1 — Discover design tokens",
         "Search for design token sources in this order (stop when you find one):",
@@ -168,7 +175,25 @@ server.prompt("craft-setup", "Scaffold craft-ds.md and COMPONENTS.md from your e
         "- ComponentName — relative/path/to/File.tsx",
         "```",
         "",
-        "When done, confirm both files were written and tell the user to run /craft to start designing.",
+        "## Step 5 — Generate craft-components.json",
+        "Write craft-components.json to the project root using this exact shape:",
+        "```json",
+        "{",
+        "  \"components\": [",
+        "    {",
+        "      \"component_name\": \"Button\",",
+        "      \"source_path\": \"src/components/Button.tsx\",",
+        "      \"semantic_component_id\": \"button.primary\",",
+        "      \"variants\": [\"primary\", \"secondary\"],",
+        "      \"states\": [\"default\"],",
+        "      \"renderer_hints\": [\"reuse existing component semantics\"]",
+        "    }",
+        "  ]",
+        "}",
+        "```",
+        "Choose the closest Craft semantic ids you can infer. If uncertain, leave a TODO comment in surrounding explanation and still emit the best mapping.",
+        "",
+        "When done, confirm all three files were written and tell the user to run /craft to start designing.",
       ].join("\n"),
     },
   }],

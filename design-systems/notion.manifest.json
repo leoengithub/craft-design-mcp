@@ -1,0 +1,37 @@
+{
+  "name": "notion",
+  "label": "Notion",
+  "components": [
+    {
+      "semantic_component_id": "navigation.primary",
+      "label": "Navigation / Editorial",
+      "variants": ["marketing"]
+    },
+    {
+      "semantic_component_id": "hero.section",
+      "label": "Hero / Editorial",
+      "variants": ["centered"]
+    },
+    {
+      "semantic_component_id": "surface.card",
+      "label": "Surface / Editorial Card",
+      "variants": ["default", "compact"]
+    },
+    {
+      "semantic_component_id": "button.primary",
+      "label": "Button / Primary"
+    },
+    {
+      "semantic_component_id": "field.text",
+      "label": "Field / Text"
+    },
+    {
+      "semantic_component_id": "empty-state.default",
+      "label": "Empty State / Editorial"
+    }
+  ],
+  "critique_rules": [
+    "Favor calmer rhythm and softer hierarchy.",
+    "Do not over-emphasize decorative chrome."
+  ]
+}

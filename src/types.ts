@@ -35,6 +35,7 @@ export interface CraftWorkflowState {
   }>
   design_md: string
   existing_components?: string[]
+  component_mappings?: ComponentMapping[]
   custom_design_system?: {
     tokens: DesignSystemTokens
     anti_patterns: string[]
@@ -64,6 +65,79 @@ export interface DesignSystemTokens {
   }
   radius: Record<string, string>
   shadows: Record<string, string>
+}
+
+export type ResolutionSource = "codebase" | "craft_ds" | "local_figma" | "materialized_local" | "primitive"
+
+export interface SemanticVariantSpec {
+  id: string
+  slots?: string[]
+  composition_rules?: string[]
+}
+
+export interface SemanticComponentSpec {
+  id: string
+  category: string
+  slots: string[]
+  variants: SemanticVariantSpec[]
+  states: string[]
+  required_tokens: string[]
+  composition_rules: string[]
+  fallback_kind: "stack" | "text" | "button" | "badge" | "divider" | "spacer"
+}
+
+export interface ComponentMapping {
+  component_name: string
+  source_path?: string
+  semantic_component_id: string
+  variants?: string[]
+  states?: string[]
+  prop_mapping?: Record<string, string>
+  renderer_hints?: string[]
+}
+
+export interface ResolvedComponentRef {
+  semantic_component_id: string
+  source: ResolutionSource
+  target_name: string
+  variant?: string
+  state?: string
+  mapping_name?: string
+  allow_fallback: boolean
+}
+
+export interface SemanticNodeMetadata {
+  component_id: string
+  variant?: string
+  state?: string
+  slots?: Record<string, string>
+  token_overrides?: Record<string, string>
+  resolution_target?: "codebase" | "design_system" | "auto"
+  allow_fallback?: boolean
+}
+
+export interface DesignSystemComponentManifest {
+  semantic_component_id: string
+  label: string
+  variants?: string[]
+  states?: string[]
+  preferred_tokens?: string[]
+  composition_rules?: string[]
+}
+
+export interface DesignSystemManifest {
+  name: string
+  label: string
+  components: DesignSystemComponentManifest[]
+  critique_rules: string[]
+}
+
+export interface SkillManifest {
+  block_type: string
+  root_component_id?: string
+  preferred_components: string[]
+  required_components: string[]
+  critique_rules: string[]
 }
 
 export interface CraftContext {
@@ -181,8 +255,13 @@ export interface RenderBlockPlan {
 
 export type RenderTextRole = "display" | "headline" | "subheadline" | "body" | "label" | "caption"
 
+interface RenderTreeCommon {
+  semantic?: SemanticNodeMetadata
+  resolution?: ResolvedComponentRef
+}
+
 export type RenderTreeNode =
-  | {
+  | ({
       kind: "stack"
       name: string
       direction: "VERTICAL" | "HORIZONTAL"
@@ -195,31 +274,31 @@ export type RenderTreeNode =
       radius?: number
       align?: "MIN" | "CENTER" | "SPACE_BETWEEN"
       children: RenderTreeNode[]
-    }
-  | {
+    } & RenderTreeCommon)
+  | ({
       kind: "text"
       text: string
       role: RenderTextRole
       color?: string
       max_width?: number
       align?: "LEFT" | "CENTER"
-    }
-  | {
+    } & RenderTreeCommon)
+  | ({
       kind: "button"
       label: string
       variant: "primary" | "secondary" | "ghost"
-    }
-  | {
+    } & RenderTreeCommon)
+  | ({
       kind: "badge"
       label: string
-    }
-  | {
+    } & RenderTreeCommon)
+  | ({
       kind: "divider"
-    }
-  | {
+    } & RenderTreeCommon)
+  | ({
       kind: "spacer"
       size: number
-    }
+    } & RenderTreeCommon)
 
 export interface RenderTreePlan {
   artifact_name: string
@@ -282,6 +361,8 @@ export interface ContinueCraftOutput {
   render_intent?: RenderIntent
   render_plan?: RenderBlockPlan
   render_tree?: RenderTreePlan
+  critique_findings?: string[]
+  preflight_findings?: string[]
   resume_prompt?: string
   hint: string
 }

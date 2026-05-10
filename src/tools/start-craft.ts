@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 import type { CraftWorkflowState } from "../types.js"
+import { parseCraftComponentsJson } from "../semantic/project-components.js"
 
 export function registerStartCraft(server: McpServer) {
   server.tool(
@@ -9,6 +10,7 @@ export function registerStartCraft(server: McpServer) {
       "Entry point for /craft. Call this first.",
       "- Pass design_md if DESIGN.md exists in the project root — resumes the workflow.",
       "- Pass components_md if COMPONENTS.md exists — agent will avoid rebuilding listed components.",
+      "- Pass craft_components_json if craft-components.json exists — semantic component mappings become available during resolution.",
       "- Pass craft_ds_md if craft-ds.md exists — uses the project's own brand tokens as a custom direction.",
       "Store the returned state and pass it to every continue_craft call.",
     ].join("\n"),
@@ -16,11 +18,12 @@ export function registerStartCraft(server: McpServer) {
       goal:         z.string().describe("What the user wants to design, or 'resume'"),
       design_md:    z.string().optional().describe("Raw DESIGN.md contents if resuming"),
       components_md: z.string().optional().describe("Raw COMPONENTS.md contents if present in project root"),
+      craft_components_json: z.string().optional().describe("Raw craft-components.json contents if present in project root"),
       craft_ds_md:  z.string().optional().describe("Raw craft-ds.md contents if present in project root"),
       renderer:     z.enum(["code", "figma"]).optional().describe("Preferred execution renderer"),
       figma_session_id: z.string().optional().describe("Craft Bridge Figma session ID when rendering into Figma"),
     },
-    async ({ goal, design_md, components_md, craft_ds_md, renderer, figma_session_id }) => {
+    async ({ goal, design_md, components_md, craft_components_json, craft_ds_md, renderer, figma_session_id }) => {
       if (!renderer) {
         throw new Error([
           "renderer_required",
@@ -31,10 +34,40 @@ export function registerStartCraft(server: McpServer) {
       }
 
       const existingComponents = components_md ? parseComponentsMd(components_md) : undefined
+      const componentMappings = craft_components_json ? parseCraftComponentsJson(craft_components_json) : undefined
       const customSystem = craft_ds_md ? await parseCraftDsMd(craft_ds_md) : undefined
 
       if (design_md) {
-        const state = parseDesignMd(design_md, goal, existingComponents, customSystem, renderer, figma_session_id)
+        const persistedGoal = parseGoal(design_md)
+        if (persistedGoal && goal !== "resume" && goalsClearlyDiffer(goal, persistedGoal)) {
+          const freshState: CraftWorkflowState = {
+            phase: "project_setup",
+            goal,
+            block_plan: inferBlockPlan(goal),
+            block_definitions: {},
+            design_md: "",
+            execution: { renderer, figma_session_id },
+            existing_components: existingComponents,
+            component_mappings: componentMappings,
+            custom_design_system: customSystem,
+          }
+
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                state: freshState,
+                hint: [
+                  `Existing DESIGN.md goal "${persistedGoal}" does not match the current request "${goal}".`,
+                  `Start a fresh Craft workflow for the new goal instead of resuming stale block state.`,
+                  `Read project files first, then ask 2–3 focused project questions and continue with answer_project_questions.`,
+                ].join(" "),
+              }),
+            }],
+          }
+        }
+
+        const state = parseDesignMd(design_md, goal, existingComponents, componentMappings, customSystem, renderer, figma_session_id)
         const currentBlock = state.block_plan.find(b => b.status === "current" || b.status === "pending")
         if (!currentBlock) {
           return {
@@ -72,13 +105,15 @@ export function registerStartCraft(server: McpServer) {
         design_md: "",
         execution: renderer ? { renderer, figma_session_id } : undefined,
         existing_components: existingComponents,
+        component_mappings: componentMappings,
         custom_design_system: customSystem,
       }
 
       const brandNote = customSystem ? " craft-ds.md was loaded — 'Your Brand' will appear as a direction option." : ""
       const componentsNote = existingComponents?.length ? ` ${existingComponents.length} existing components found in COMPONENTS.md — reuse them instead of rebuilding.` : ""
+      const mappingNote = componentMappings?.length ? ` ${componentMappings.length} semantic component mappings found in craft-components.json — prefer those during resolution.` : ""
       const figmaNote = renderer === "figma" && figma_session_id
-        ? ` Figma renderer is locked to session "${figma_session_id}" — use figma_get_context before execution, and render via figma_prepare_plan/figma_wait_for_result instead of generating code.`
+        ? ` Figma renderer is locked to session "${figma_session_id}" — use figma_get_context before execution, and prefer figma_render_tree instead of generating code.`
         : ""
       const hasKnownBlocks = state.block_plan.length > 0
       const screensInstruction = !hasKnownBlocks
@@ -96,7 +131,7 @@ export function registerStartCraft(server: McpServer) {
               `Good questions for this phase establish: who uses this and what's their job-to-be-done in this flow; what a successful interaction looks like (primary action / outcome); any hard constraints from the existing system or data model.`,
               `Do NOT ask generic questions like "who is the audience" or "what's the tone" — derive those from the goal and codebase. Only ask what you genuinely can't infer.`,
               `Ask one at a time via chat — one at a time. Propose your own recommendation before waiting.`,
-              `Once context is established, call continue_craft({ state, action: { type: 'answer_project_questions', answers: [context_summary, primary_success_criteria, constraints_or_tone${!hasKnownBlocks ? ", screens_list" : ""}] } }).${screensInstruction}${brandNote}${componentsNote}${figmaNote}`,
+              `Once context is established, call continue_craft({ state, action: { type: 'answer_project_questions', answers: [context_summary, primary_success_criteria, constraints_or_tone${!hasKnownBlocks ? ", screens_list" : ""}] } }).${screensInstruction}${brandNote}${componentsNote}${mappingNote}${figmaNote}`,
             ].join(" "),
           }),
         }],
@@ -134,6 +169,7 @@ export function parseDesignMd(
   content: string,
   goal: string,
   existingComponents?: string[],
+  componentMappings?: CraftWorkflowState["component_mappings"],
   customSystem?: CraftWorkflowState["custom_design_system"],
   renderer?: "code" | "figma",
   figma_session_id?: string,
@@ -187,6 +223,7 @@ export function parseDesignMd(
     block_definitions: Object.fromEntries(headingEvents.map(e => [e.block, {}])),
     design_md: content,
     existing_components: existingComponents,
+    component_mappings: componentMappings,
     custom_design_system: customSystem,
   }
 }
@@ -229,4 +266,27 @@ async function parseCraftDsMd(content: string): Promise<CraftWorkflowState["cust
   } catch {
     return undefined
   }
+}
+
+export function goalsClearlyDiffer(requestedGoal: string, persistedGoal: string): boolean {
+  const requested = meaningfulGoalTokens(requestedGoal)
+  const persisted = meaningfulGoalTokens(persistedGoal)
+  if (requested.length === 0 || persisted.length === 0) return false
+
+  const overlap = requested.filter((token) => persisted.includes(token)).length
+  const union = new Set([...requested, ...persisted]).size
+  return overlap / union < 0.2
+}
+
+function meaningfulGoalTokens(goal: string): string[] {
+  const stopWords = new Set([
+    "a", "an", "the", "for", "to", "of", "and", "with", "page", "screen", "component",
+    "create", "build", "design", "make", "new", "app", "ui",
+  ])
+
+  return goal
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length > 1 && !stopWords.has(token))
 }

@@ -1,0 +1,72 @@
+{
+  "name": "linear",
+  "label": "Linear",
+  "components": [
+    {
+      "semantic_component_id": "navigation.primary",
+      "label": "Navigation / Primary",
+      "variants": ["application"],
+      "preferred_tokens": ["bg", "border", "text", "primary"],
+      "composition_rules": ["Keep the bar flat, precise, and low-noise."]
+    },
+    {
+      "semantic_component_id": "hero.section",
+      "label": "Hero / Centered",
+      "variants": ["centered"],
+      "preferred_tokens": ["bg", "text", "muted", "primary"]
+    },
+    {
+      "semantic_component_id": "banner.feedback",
+      "label": "Banner / Feedback",
+      "variants": ["subtle"],
+      "preferred_tokens": ["surface", "border", "text", "muted"]
+    },
+    {
+      "semantic_component_id": "button.primary",
+      "label": "Button / Primary",
+      "variants": ["default"],
+      "preferred_tokens": ["primary", "text"]
+    },
+    {
+      "semantic_component_id": "button.secondary",
+      "label": "Button / Secondary",
+      "variants": ["default"],
+      "preferred_tokens": ["surface", "border", "text"]
+    },
+    {
+      "semantic_component_id": "surface.card",
+      "label": "Surface / Card",
+      "variants": ["default", "featured", "compact"],
+      "preferred_tokens": ["surface", "border", "text", "muted"]
+    },
+    {
+      "semantic_component_id": "toolbar.group",
+      "label": "Toolbar / Group",
+      "variants": ["default"],
+      "preferred_tokens": ["bg", "border", "text", "primary"]
+    },
+    {
+      "semantic_component_id": "field.text",
+      "label": "Field / Text",
+      "variants": ["stacked"],
+      "preferred_tokens": ["surface", "border", "text", "muted"]
+    },
+    {
+      "semantic_component_id": "table.data",
+      "label": "Table / Data",
+      "variants": ["compact"],
+      "preferred_tokens": ["surface", "border", "text", "muted"]
+    },
+    {
+      "semantic_component_id": "empty-state.default",
+      "label": "Empty State / Default",
+      "variants": ["default"],
+      "preferred_tokens": ["bg", "text", "muted", "primary"]
+    }
+  ],
+  "critique_rules": [
+    "Prefer flat surfaces and borders over decorative elevation.",
+    "Use one dominant CTA and keep secondary actions visually restrained.",
+    "Avoid noisy supporting elements around the primary workflow."
+  ]
+}

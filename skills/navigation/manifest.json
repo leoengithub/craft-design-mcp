@@ -1,0 +1,10 @@
+{
+  "block_type": "navigation",
+  "root_component_id": "navigation.primary",
+  "preferred_components": ["navigation.primary", "button.primary", "button.secondary"],
+  "required_components": ["navigation.primary"],
+  "critique_rules": [
+    "Resolve navigation through a semantic navigation component, not an anonymous row.",
+    "Ensure CTA is semantically distinct from links."
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "name": "posthog",
+  "label": "PostHog",
+  "components": [
+    {
+      "semantic_component_id": "navigation.primary",
+      "label": "Navigation / App Dense",
+      "variants": ["application"]
+    },
+    {
+      "semantic_component_id": "toolbar.group",
+      "label": "Toolbar / Dense",
+      "variants": ["dense"]
+    },
+    {
+      "semantic_component_id": "field.text",
+      "label": "Field / Dense"
+    },
+    {
+      "semantic_component_id": "table.data",
+      "label": "Table / Dense",
+      "variants": ["compact"]
+    },
+    {
+      "semantic_component_id": "surface.card",
+      "label": "Surface / Dense Card",
+      "variants": ["compact", "featured"]
+    },
+    {
+      "semantic_component_id": "button.primary",
+      "label": "Button / Primary"
+    }
+  ],
+  "critique_rules": [
+    "Prefer dense but readable controls.",
+    "Give data surfaces stronger structure than marketing surfaces."
+  ]
+}

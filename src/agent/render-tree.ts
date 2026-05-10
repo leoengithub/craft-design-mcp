@@ -4,6 +4,7 @@ import type {
   RenderBlockPlan,
   RenderTreeNode,
   RenderTreePlan,
+  SemanticNodeMetadata,
 } from "../types.js"
 import { buildRenderBlockPlan } from "./render-plan.js"
 
@@ -86,6 +87,14 @@ function feedbackBarTree(plan: RenderBlockPlan, width: number): RenderTreeNode {
     padding: 20,
     gap: 20,
     align: "SPACE_BETWEEN",
+  }, {
+    component_id: "banner.feedback",
+    variant: "default",
+    slots: {
+      message: plan.content.body ?? plan.content.title ?? plan.artifact_name,
+      primary_action: plan.content.cta_label ?? "",
+      dismiss_action: plan.content.secondary_cta_label ?? "Dismiss",
+    },
   })
 }
 
@@ -102,6 +111,9 @@ function navigationTree(plan: RenderBlockPlan, width: number, padding: number): 
     padding,
     gap: 24,
     align: "SPACE_BETWEEN",
+  }, {
+    component_id: "navigation.primary",
+    variant: /dashboard|admin|analytics/i.test(plan.goal) ? "application" : "marketing",
   })
 }
 
@@ -124,6 +136,9 @@ function heroTree(plan: RenderBlockPlan, width: number, padding: number): Render
     padding: plan.platform === "mobile" ? 32 : padding * 2,
     gap: 24,
     align: "CENTER",
+  }, {
+    component_id: "hero.section",
+    variant: "centered",
   })
 }
 
@@ -140,7 +155,21 @@ function pricingTree(plan: RenderBlockPlan, width: number, padding: number): Ren
 
 function accordionTree(plan: RenderBlockPlan, width: number, padding: number): RenderTreeNode {
   return sectionWithHeader(plan, width, padding, (plan.content.items ?? []).map((item) =>
-    card(item.title, item.body ?? "", { compact: true })
+    stack(item.title, "VERTICAL", [
+      text(item.title, "label"),
+      ...(item.body ? [text(item.body, "body", plan.style.muted)] : []),
+    ], {
+      fill: "#FFFFFF",
+      stroke: "#E5E5E5",
+      radius: 12,
+      padding: 16,
+      gap: 8,
+    }, {
+      component_id: "accordion.item",
+      variant: "default",
+      state: "collapsed",
+      slots: { summary: item.title, detail: item.body ?? "" },
+    })
   ))
 }
 
@@ -156,6 +185,9 @@ function toolbarTree(plan: RenderBlockPlan, width: number, padding: number): Ren
     padding,
     gap: 24,
     align: "SPACE_BETWEEN",
+  }, {
+    component_id: "toolbar.group",
+    variant: plan.content.items && plan.content.items.length > 4 ? "dense" : "default",
   })
 }
 
@@ -166,7 +198,11 @@ function formTree(plan: RenderBlockPlan, width: number, padding: number): Render
         stack(item.title, "VERTICAL", [
           text(item.title, "label"),
           card(item.body ?? "Enter value", "", { compact: true, mutedTitle: true }),
-        ], { gap: 8 })
+        ], { gap: 8 }, {
+          component_id: "field.text",
+          variant: "stacked",
+          slots: { label: item.title, input: item.body ?? "Enter value" },
+        })
       ),
       ...(plan.content.cta_label ? [button(plan.content.cta_label, "primary")] : []),
     ]),
@@ -184,6 +220,9 @@ function sidebarTree(plan: RenderBlockPlan, width: number, padding: number): Ren
     stroke: plan.style.border,
     padding,
     gap: 12,
+  }, {
+    component_id: "navigation.primary",
+    variant: "application",
   })
 }
 
@@ -200,6 +239,9 @@ function emptyStateTree(plan: RenderBlockPlan, width: number, padding: number): 
     padding,
     gap: 16,
     align: "CENTER",
+  }, {
+    component_id: "empty-state.default",
+    variant: "default",
   })
 }
 
@@ -226,7 +268,7 @@ function dataTableTree(plan: RenderBlockPlan, width: number, padding: number): R
       ...Array.from({ length: 4 }, (_, row) =>
         stack(`Row ${row + 1}`, "HORIZONTAL", columns.map((column, index) => text(`${column} ${row + index + 1}`, "body", plan.style.muted)), { gap: 16 })
       ),
-    ], { width: width - padding * 2 }),
+    ], { width: width - padding * 2, semantic: { component_id: "table.data", variant: "compact" } }),
   ])
 }
 
@@ -266,16 +308,17 @@ function sectionWithHeader(plan: RenderBlockPlan, width: number, padding: number
     radius: plan.layout === "generic" ? 12 : undefined,
     padding,
     gap: 16,
-  })
+  }, semanticForLayout(plan.layout))
 }
 
 function stack(
   name: string,
   direction: "VERTICAL" | "HORIZONTAL",
   children: RenderTreeNode[],
-  options: Omit<Extract<RenderTreeNode, { kind: "stack" }>, "kind" | "name" | "direction" | "children"> = {},
+  options: Omit<Extract<RenderTreeNode, { kind: "stack" }>, "kind" | "name" | "direction" | "children" | "semantic" | "resolution"> = {},
+  semantic?: SemanticNodeMetadata,
 ): RenderTreeNode {
-  return { kind: "stack", name, direction, children, ...options }
+  return { kind: "stack", name, direction, children, ...options, ...(semantic ? { semantic } : {}) }
 }
 
 function text(textValue: string, role: "display" | "headline" | "subheadline" | "body" | "label" | "caption", color?: string, max_width?: number, align?: "LEFT" | "CENTER"): RenderTreeNode {
@@ -283,11 +326,28 @@ function text(textValue: string, role: "display" | "headline" | "subheadline" | 
 }
 
 function button(label: string, variant: "primary" | "secondary" | "ghost"): RenderTreeNode {
-  return { kind: "button", label, variant }
+  return {
+    kind: "button",
+    label,
+    variant,
+    semantic: {
+      component_id: `button.${variant}`,
+      variant,
+      slots: { label },
+    },
+  }
 }
 
 function badge(label: string): RenderTreeNode {
-  return { kind: "badge", label }
+  return {
+    kind: "badge",
+    label,
+    semantic: {
+      component_id: "surface.card",
+      variant: "compact",
+      slots: { label },
+    },
+  }
 }
 
 function divider(): RenderTreeNode {
@@ -301,15 +361,19 @@ function card(title: string, body: string, options: { eyebrow?: string; compact?
     ...(body ? [text(body, "body")] : []),
     ...(options.footer ? [options.footer] : []),
   ], {
-    fill: options.featured ? "#FFFFFF" : "#FFFFFF",
+    fill: "#FFFFFF",
     stroke: "#E5E5E5",
     radius: 12,
     padding: options.compact ? 16 : 20,
     gap: options.compact ? 8 : 12,
+  }, {
+    component_id: "surface.card",
+    variant: options.featured ? "featured" : options.compact ? "compact" : "default",
+    slots: { title, body },
   })
 }
 
-function cardStack(name: string, children: RenderTreeNode[], options: { width?: number } = {}): RenderTreeNode {
+function cardStack(name: string, children: RenderTreeNode[], options: { width?: number; semantic?: SemanticNodeMetadata } = {}): RenderTreeNode {
   return stack(name, "VERTICAL", children, {
     width: options.width,
     fill: "#FFFFFF",
@@ -317,5 +381,21 @@ function cardStack(name: string, children: RenderTreeNode[], options: { width?: 
     radius: 12,
     padding: 20,
     gap: 16,
+  }, options.semantic ?? {
+    component_id: "surface.card",
+    variant: "default",
   })
+}
+
+function semanticForLayout(layout: RenderBlockPlan["layout"]): SemanticNodeMetadata | undefined {
+  switch (layout) {
+    case "pricing":
+      return { component_id: "surface.card", variant: "default", allow_fallback: true }
+    case "accordion":
+      return { component_id: "accordion.item", variant: "default", allow_fallback: true }
+    case "generic":
+      return { component_id: "surface.card", variant: "default", allow_fallback: true }
+    default:
+      return undefined
+  }
 }
