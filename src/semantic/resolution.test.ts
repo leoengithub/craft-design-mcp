@@ -143,6 +143,7 @@ function basePlan(root: RenderTreePlan["root"]): RenderTreePlan {
     asset_section_name: "Craft / Assets / Test Artifact",
     goal: "Test",
     block: "navigation",
+    design_system_name: "linear",
     platform: "web",
     tokens: {
       colors: {

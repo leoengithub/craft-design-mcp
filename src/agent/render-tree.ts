@@ -16,6 +16,7 @@ export function buildRenderTreePlan(state: CraftWorkflowState, craftContext: Cra
     asset_section_name: blockPlan.asset_section_name,
     goal: blockPlan.goal,
     block: blockPlan.block,
+    design_system_name: blockPlan.direction.design_system,
     platform: blockPlan.platform,
     tokens: blockPlan.tokens,
     palette: {
@@ -192,21 +193,46 @@ function toolbarTree(plan: RenderBlockPlan, width: number, padding: number): Ren
 }
 
 function formTree(plan: RenderBlockPlan, width: number, padding: number): RenderTreeNode {
-  return sectionWithHeader(plan, width, padding, [
-    cardStack("Form Card", [
-      ...(plan.content.items ?? []).map((item) =>
-        stack(item.title, "VERTICAL", [
-          text(item.title, "label"),
-          card(item.body ?? "Enter value", "", { compact: true, mutedTitle: true }),
-        ], { gap: 8 }, {
-          component_id: "field.text",
-          variant: "stacked",
-          slots: { label: item.title, input: item.body ?? "Enter value" },
-        })
-      ),
-      ...(plan.content.cta_label ? [button(plan.content.cta_label, "primary")] : []),
-    ]),
-  ])
+  const dialogLike = isDialogLikeForm(plan)
+  const formFields = (plan.content.items ?? []).map((item) => {
+    const lower = `${item.title} ${item.body ?? ""}`.toLowerCase()
+    if (/active|enabled|toggle|switch|on|off/.test(lower)) {
+      return switchField(item.title, item.body ?? "Apply this setting")
+    }
+    if (/select|choose|round|status|type|option|all rounds|menu/.test(lower)) {
+      return selectField(item.title, item.body ?? "Select an option")
+    }
+    return textField(item.title, item.body ?? "Enter value")
+  })
+
+  const actionRow = stack("Form Actions", "HORIZONTAL", [
+    ...(plan.content.secondary_cta_label ? [button(plan.content.secondary_cta_label, "ghost")] : []),
+    ...(plan.content.cta_label ? [button(plan.content.cta_label, "primary")] : []),
+  ], { gap: 12, align: "SPACE_BETWEEN" }, {
+    component_id: "actions.footer",
+    variant: "default",
+  })
+
+  return stack(plan.artifact_name, "VERTICAL", [
+    stack("Dialog Header", "VERTICAL", [
+      ...(plan.content.title ? [text(plan.content.title, dialogLike ? "headline" : "subheadline")] : []),
+      ...(plan.content.body ? [text(plan.content.body, "body", plan.style.muted, 640)] : []),
+    ], { gap: 8 }),
+    ...formFields,
+    actionRow,
+  ], {
+    width: dialogLike ? Math.min(width, 640) : width,
+    min_height: dialogLike ? undefined : 420,
+    fill: dialogLike ? plan.style.surface : plan.style.bg,
+    stroke: plan.style.border,
+    radius: dialogLike ? 16 : 12,
+    padding,
+    gap: 20,
+    align: "MIN",
+  }, {
+    component_id: dialogLike ? "dialog.form" : "surface.card",
+    variant: dialogLike ? "standard" : "default",
+  })
 }
 
 function sidebarTree(plan: RenderBlockPlan, width: number, padding: number): RenderTreeNode {
@@ -385,6 +411,83 @@ function cardStack(name: string, children: RenderTreeNode[], options: { width?: 
     component_id: "surface.card",
     variant: "default",
   })
+}
+
+function textField(label: string, placeholder: string): RenderTreeNode {
+  return stack(label, "VERTICAL", [
+    text(label, "label"),
+    stack(`${label} Input`, "HORIZONTAL", [
+      text(placeholder, "body", "#9CA3AF"),
+    ], {
+      stroke: "#E0E0E0",
+      radius: 8,
+      padding: 14,
+      min_height: 48,
+      align: "MIN",
+    }),
+  ], { gap: 8 }, {
+    component_id: "field.text",
+    variant: "stacked",
+    slots: { label, input: placeholder },
+  })
+}
+
+function selectField(label: string, value: string): RenderTreeNode {
+  return stack(label, "VERTICAL", [
+    text(label, "label"),
+    stack(`${label} Select`, "HORIZONTAL", [
+      text(value, "body"),
+      text("▾", "label", "#6B7280"),
+    ], {
+      stroke: "#E0E0E0",
+      radius: 8,
+      padding: 14,
+      min_height: 48,
+      align: "SPACE_BETWEEN",
+    }),
+  ], { gap: 8 }, {
+    component_id: "field.select",
+    variant: "outlined",
+    slots: { label, value },
+  })
+}
+
+function switchField(label: string, description: string): RenderTreeNode {
+  return stack(label, "HORIZONTAL", [
+    stack(`${label} Copy`, "VERTICAL", [
+      text(label, "label"),
+      text(description, "caption"),
+    ], { gap: 4 }),
+    stack(`${label} Toggle`, "HORIZONTAL", [
+      spacer(28),
+    ], {
+      fill: "#E5E7EB",
+      radius: 999,
+      padding: 4,
+      width: 52,
+      min_height: 32,
+      align: "SPACE_BETWEEN",
+    }),
+  ], {
+    stroke: "#E0E0E0",
+    radius: 10,
+    padding: 14,
+    gap: 16,
+    align: "SPACE_BETWEEN",
+  }, {
+    component_id: "toggle.switch",
+    variant: "default",
+    state: "on",
+    slots: { label, description },
+  })
+}
+
+function spacer(size: number): RenderTreeNode {
+  return { kind: "spacer", size }
+}
+
+function isDialogLikeForm(plan: RenderBlockPlan): boolean {
+  return /\b(add|create|edit|invite|configure|rule|modal|dialog)\b/i.test(`${plan.goal} ${plan.content.title ?? ""}`)
 }
 
 function semanticForLayout(layout: RenderBlockPlan["layout"]): SemanticNodeMetadata | undefined {

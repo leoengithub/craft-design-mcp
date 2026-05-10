@@ -217,6 +217,7 @@ const RenderTreePlanSchema = z.object({
   asset_section_name: z.string(),
   goal: z.string(),
   block: z.string(),
+  design_system_name: z.string(),
   platform: z.enum(["web", "mobile", "both"]),
   tokens: DesignSystemTokensSchema,
   palette: z.object({

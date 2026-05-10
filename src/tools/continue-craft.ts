@@ -16,6 +16,7 @@ const ActionSchema = z.discriminatedUnion("type", [
 const StateSchema = z.object({
   phase: z.enum(["project_setup", "block_definition", "direction_choice", "define_or_design", "ready", "block_done", "all_done"]),
   goal: z.string(),
+  project_design_system: z.string().optional(),
   block_plan: z.array(z.object({ block: z.string(), status: z.enum(["pending", "current", "completed"]) })),
   current_block: z.string().optional(),
   execution: z.object({
@@ -90,13 +91,14 @@ export async function advance(state: CraftWorkflowState, action: z.infer<typeof 
       }
 
       const currentBlock = blockPlan.find(b => b.status === "current")?.block ?? blockPlan[0]?.block ?? "screen"
+      const projectDesignSystemLine = state.project_design_system ? `\nProject design system: ${state.project_design_system}` : ""
       const next: CraftWorkflowState = {
         ...state,
         phase: "block_definition",
         current_block: currentBlock,
         block_plan: blockPlan,
         project_context: { audience, tone, brand_notes: brandNotes },
-        design_md: appendDesignMd(state.design_md, `## Goal\n${state.goal}\n\n## Project Context\nAudience: ${audience}\nTone: ${tone}${brandNotes ? `\nBrand: ${brandNotes}` : ""}`),
+        design_md: appendDesignMd(state.design_md, `## Goal\n${state.goal}\n\n## Project Context\nAudience: ${audience}\nTone: ${tone}${brandNotes ? `\nBrand: ${brandNotes}` : ""}${projectDesignSystemLine}`),
       }
       return {
         state: next,
@@ -120,7 +122,7 @@ export async function advance(state: CraftWorkflowState, action: z.infer<typeof 
         return {
           state: next,
           directions,
-          hint: `Present these directions to the user by feel — describe the mood, not the tech stack. Before asking them to choose, state which direction you'd recommend based on the brief and why (one sentence). Then ask: "Does that feel right, or do you want something different?" Once they confirm or redirect, call continue_craft({ state, action: { type: "choose_direction", direction_id: "..." } })`,
+          hint: `Present these directions to the user by feel — describe the mood, not the tech stack. If a project design system is present, recommend it first unless the user explicitly wants another style. Before asking them to choose, state which direction you'd recommend based on the brief and why (one sentence). Then ask: "Does that feel right, or do you want something different?" Once they confirm or redirect, call continue_craft({ state, action: { type: "choose_direction", direction_id: "..." } })`,
         }
       }
 
@@ -347,6 +349,20 @@ export function getDirections(state: CraftWorkflowState): Direction[] {
 
   const ranked = [...DIRECTIONS].sort((a, b) => (scores[b.id] ?? 0) - (scores[a.id] ?? 0))
 
+  const leading: Direction[] = []
+
+  if (state.project_design_system && state.project_design_system !== "custom") {
+    leading.push({
+      id: `project-${state.project_design_system}`,
+      name: `Project System (${labelForDesignSystem(state.project_design_system)})`,
+      description: `Uses the design library already detected in the project codebase: ${labelForDesignSystem(state.project_design_system)}.`,
+      reference: state.project_design_system,
+      design_system: state.project_design_system,
+      palette_preview: [],
+      typeface: "From detected project system",
+    })
+  }
+
   // Prepend the custom direction if craft-ds.md was loaded
   if (state.custom_design_system) {
     const customDirection: Direction = {
@@ -358,10 +374,18 @@ export function getDirections(state: CraftWorkflowState): Direction[] {
       palette_preview: [],
       typeface: "From your brand tokens",
     }
-    return [customDirection, ...ranked]
+    leading.push(customDirection)
   }
 
-  return ranked
+  return [...leading, ...ranked]
+}
+
+function labelForDesignSystem(name: string): string {
+  if (name === "material-ui") return "Material UI"
+  return name
+    .split(/[-_\s]+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ")
 }
 
 // Natural next-block suggestions per block type. Used for block sequencing after approval.

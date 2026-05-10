@@ -1,9 +1,10 @@
 {
   "block_type": "form",
-  "root_component_id": "surface.card",
-  "preferred_components": ["field.text", "button.primary", "surface.card"],
-  "required_components": ["field.text"],
+  "root_component_id": "dialog.form",
+  "preferred_components": ["dialog.form", "field.text", "field.select", "toggle.switch", "actions.footer", "button.primary"],
+  "required_components": ["field.text", "actions.footer"],
   "critique_rules": [
+    "Use semantic dialog or form-shell components instead of generic centered cards.",
     "Use semantic text fields for repeated form inputs.",
     "Primary submit action should resolve to a semantic primary button."
   ]

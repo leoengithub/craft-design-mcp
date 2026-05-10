@@ -9,6 +9,7 @@ describe("semantic preflight", () => {
       asset_section_name: "Craft / Assets / Feedback bar",
       goal: "Feedback bar with dismiss action",
       block: "toolbar",
+      design_system_name: "linear",
       platform: "web",
       tokens: {
         colors: {},

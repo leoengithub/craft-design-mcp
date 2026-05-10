@@ -12,6 +12,7 @@ export type BlockStatus = "pending" | "current" | "completed"
 export interface CraftWorkflowState {
   phase: WorkflowPhase
   goal: string
+  project_design_system?: string
   block_plan: Array<{ block: string; status: BlockStatus }>
   current_block?: string
   execution?: {
@@ -305,6 +306,7 @@ export interface RenderTreePlan {
   asset_section_name: string
   goal: string
   block: string
+  design_system_name: string
   platform: "web" | "mobile" | "both"
   tokens: DesignSystemTokens
   palette: {

@@ -1,0 +1,76 @@
+{
+  "name": "material-ui",
+  "label": "Material UI",
+  "components": [
+    {
+      "semantic_component_id": "toolbar.group",
+      "label": "MUI / Toolbar",
+      "variants": ["default", "dense"],
+      "preferred_tokens": ["bg", "border", "text", "primary"],
+      "composition_rules": ["Use a flat toolbar row with contained primary action and low-emphasis secondary actions."]
+    },
+    {
+      "semantic_component_id": "field.text",
+      "label": "MUI / TextField",
+      "variants": ["outlined", "stacked"],
+      "states": ["empty", "filled", "error"],
+      "preferred_tokens": ["surface", "border", "text", "muted"]
+    },
+    {
+      "semantic_component_id": "field.select",
+      "label": "MUI / Select",
+      "variants": ["outlined"],
+      "states": ["empty", "filled", "error"],
+      "preferred_tokens": ["surface", "border", "text", "muted"]
+    },
+    {
+      "semantic_component_id": "toggle.switch",
+      "label": "MUI / Switch",
+      "variants": ["default"],
+      "states": ["on", "off", "disabled"],
+      "preferred_tokens": ["surface", "border", "primary", "muted"]
+    },
+    {
+      "semantic_component_id": "dialog.form",
+      "label": "MUI / Dialog Form",
+      "variants": ["standard"],
+      "preferred_tokens": ["surface", "border", "text", "muted"]
+    },
+    {
+      "semantic_component_id": "actions.footer",
+      "label": "MUI / Dialog Actions",
+      "variants": ["default"],
+      "preferred_tokens": ["surface", "border", "text", "primary"]
+    },
+    {
+      "semantic_component_id": "button.primary",
+      "label": "MUI / Button Contained",
+      "variants": ["contained"],
+      "preferred_tokens": ["primary", "text"]
+    },
+    {
+      "semantic_component_id": "button.secondary",
+      "label": "MUI / Button Outlined",
+      "variants": ["outlined"],
+      "preferred_tokens": ["surface", "border", "text"]
+    },
+    {
+      "semantic_component_id": "button.ghost",
+      "label": "MUI / Button Text",
+      "variants": ["text"],
+      "preferred_tokens": ["text", "muted"]
+    },
+    {
+      "semantic_component_id": "surface.card",
+      "label": "MUI / Paper",
+      "variants": ["default", "compact"],
+      "preferred_tokens": ["surface", "border", "text", "muted"]
+    }
+  ],
+  "critique_rules": [
+    "Prefer Roboto text hierarchy and standard Material spacing rhythm.",
+    "Use contained, outlined, and text button hierarchy consistently.",
+    "Avoid decorative backgrounds behind ordinary product forms and dialogs.",
+    "Prefer standard TextField, Select, and Switch semantics over custom field shells."
+  ]
+}

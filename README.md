@@ -137,11 +137,12 @@ After setup, `/craft` will offer **Your Brand** as a fourth direction option and
 
 ---
 
-## Design system library (7 systems)
+## Design system library (8 systems)
 
 | System | Direction | Feel |
 |--------|-----------|------|
 | `linear` | Focused & Calm | Flat, indigo accent, Inter — the default for most products |
+| `material-ui` | Focused & Calm / Data-Dense Pro | Roboto, app-first controls, standard dialogs/forms/toolbars |
 | `vercel` | Focused & Calm | Dark-first, Geist typeface, terminal aesthetic |
 | `stripe` | Focused & Calm | Navy + indigo, polished marketing |
 | `shadcn` | Focused & Calm | Zinc gray, component-neutral baseline |
@@ -149,7 +150,7 @@ After setup, `/craft` will offer **Your Brand** as a fourth direction option and
 | `posthog` | Data-Dense Pro | Dark, orange accent, tight density |
 | `clickhouse` | Data-Dense Pro | Dark, yellow accent, SQL-native |
 
-The agent never chooses the design system — the direction implies it. If you want a specific system, name it ("use Stripe's design system") and the agent resolves it.
+The agent does not need to guess blindly. If the codebase already points to a known library, `/craft` should pass that as `project_design_system` and recommend it first. If you want a different system, name it explicitly ("use Stripe's design system") and the agent should switch.
 
 ---
 
@@ -252,6 +253,8 @@ This is the machine-readable bridge from your codebase library into the Craft se
 4. materialized local Craft components
 5. primitive fallback
 
+If the project already uses a known library such as Material UI, `/craft` should detect that from the codebase, pass `project_design_system`, and recommend the matching Craft design system first instead of defaulting to a generic direction.
+
 ---
 
 ## Extending the library
@@ -293,6 +296,12 @@ For Figma workflows, `/craft` should not improvise renderer steps. The intended 
 - runs critique rules from the selected skill and design system
 - runs pre-render lint, including token validity and text contrast checks
 - dispatches the primary renderer path (`render_tree` for Figma)
+
+On the Figma side, the plugin should:
+
+- materialize and reuse local text styles per design system and text role
+- apply those styles instead of leaving typography as ad hoc node settings
+- keep the bridge deterministic while the MCP owns taste and semantic selection
 
 The bridge should stay a deterministic executor. Taste and discipline are enforced on the MCP side.
 

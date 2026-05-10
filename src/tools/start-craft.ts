@@ -20,10 +20,11 @@ export function registerStartCraft(server: McpServer) {
       components_md: z.string().optional().describe("Raw COMPONENTS.md contents if present in project root"),
       craft_components_json: z.string().optional().describe("Raw craft-components.json contents if present in project root"),
       craft_ds_md:  z.string().optional().describe("Raw craft-ds.md contents if present in project root"),
+      project_design_system: z.string().optional().describe("Known project design system/library detected from the codebase, e.g. material-ui, shadcn"),
       renderer:     z.enum(["code", "figma"]).optional().describe("Preferred execution renderer"),
       figma_session_id: z.string().optional().describe("Craft Bridge Figma session ID when rendering into Figma"),
     },
-    async ({ goal, design_md, components_md, craft_components_json, craft_ds_md, renderer, figma_session_id }) => {
+    async ({ goal, design_md, components_md, craft_components_json, craft_ds_md, project_design_system, renderer, figma_session_id }) => {
       if (!renderer) {
         throw new Error([
           "renderer_required",
@@ -43,6 +44,7 @@ export function registerStartCraft(server: McpServer) {
           const freshState: CraftWorkflowState = {
             phase: "project_setup",
             goal,
+            project_design_system,
             block_plan: inferBlockPlan(goal),
             block_definitions: {},
             design_md: "",
@@ -67,7 +69,7 @@ export function registerStartCraft(server: McpServer) {
           }
         }
 
-        const state = parseDesignMd(design_md, goal, existingComponents, componentMappings, customSystem, renderer, figma_session_id)
+        const state = parseDesignMd(design_md, goal, existingComponents, componentMappings, customSystem, renderer, figma_session_id, project_design_system)
         const currentBlock = state.block_plan.find(b => b.status === "current" || b.status === "pending")
         if (!currentBlock) {
           return {
@@ -100,6 +102,7 @@ export function registerStartCraft(server: McpServer) {
       const state: CraftWorkflowState = {
         phase: "project_setup",
         goal,
+        project_design_system,
         block_plan: inferBlockPlan(goal),
         block_definitions: {},
         design_md: "",
@@ -114,6 +117,9 @@ export function registerStartCraft(server: McpServer) {
       const mappingNote = componentMappings?.length ? ` ${componentMappings.length} semantic component mappings found in craft-components.json — prefer those during resolution.` : ""
       const figmaNote = renderer === "figma" && figma_session_id
         ? ` Figma renderer is locked to session "${figma_session_id}" — use figma_get_context before execution, and prefer figma_render_tree instead of generating code.`
+        : ""
+      const designSystemNote = project_design_system
+        ? ` Project design system detected: "${project_design_system}" — recommend that direction unless the user explicitly wants another Craft system.`
         : ""
       const hasKnownBlocks = state.block_plan.length > 0
       const screensInstruction = !hasKnownBlocks
@@ -131,7 +137,7 @@ export function registerStartCraft(server: McpServer) {
               `Good questions for this phase establish: who uses this and what's their job-to-be-done in this flow; what a successful interaction looks like (primary action / outcome); any hard constraints from the existing system or data model.`,
               `Do NOT ask generic questions like "who is the audience" or "what's the tone" — derive those from the goal and codebase. Only ask what you genuinely can't infer.`,
               `Ask one at a time via chat — one at a time. Propose your own recommendation before waiting.`,
-              `Once context is established, call continue_craft({ state, action: { type: 'answer_project_questions', answers: [context_summary, primary_success_criteria, constraints_or_tone${!hasKnownBlocks ? ", screens_list" : ""}] } }).${screensInstruction}${brandNote}${componentsNote}${mappingNote}${figmaNote}`,
+              `Once context is established, call continue_craft({ state, action: { type: 'answer_project_questions', answers: [context_summary, primary_success_criteria, constraints_or_tone${!hasKnownBlocks ? ", screens_list" : ""}] } }).${screensInstruction}${brandNote}${componentsNote}${mappingNote}${figmaNote}${designSystemNote}`,
             ].join(" "),
           }),
         }],
@@ -173,6 +179,7 @@ export function parseDesignMd(
   customSystem?: CraftWorkflowState["custom_design_system"],
   renderer?: "code" | "figma",
   figma_session_id?: string,
+  project_design_system?: string,
 ): CraftWorkflowState {
   const parsedGoal = parseGoal(content) ?? (goal === "resume" ? "resume" : goal)
   const headingEvents = [...content.matchAll(/###\s+(.+?)\s+(✅|🔄)/g)].map(m => ({
@@ -212,6 +219,7 @@ export function parseDesignMd(
   return {
     phase,
     goal: parsedGoal,
+    project_design_system: project_design_system ?? parseProjectDesignSystem(content),
     block_plan: blockPlan,
     current_block: currentBlock,
     execution: renderer ? { renderer, figma_session_id } : undefined,
@@ -239,6 +247,10 @@ function parseComponentsMd(content: string): string[] {
 
 function parseGoal(content: string): string | undefined {
   return content.match(/## Goal\n(.+)/m)?.[1].trim()
+}
+
+function parseProjectDesignSystem(content: string): string | undefined {
+  return content.match(/Project design system:\s*(.+)/i)?.[1].trim().toLowerCase()
 }
 
 function normalizeBlockName(value: string): string {

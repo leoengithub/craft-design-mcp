@@ -7,6 +7,7 @@ import { awaitRequestResult, createRequest } from "../agent/sessions.js"
 const StateSchema = z.object({
   phase: z.enum(["project_setup", "block_definition", "direction_choice", "define_or_design", "ready", "block_done", "all_done"]),
   goal: z.string(),
+  project_design_system: z.string().optional(),
   block_plan: z.array(z.object({ block: z.string(), status: z.enum(["pending", "current", "completed"]) })),
   current_block: z.string().optional(),
   execution: z.object({

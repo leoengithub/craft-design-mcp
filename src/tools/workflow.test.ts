@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { CraftWorkflowState } from "../types.js"
 import { loadSkill } from "../skills/loader.js"
-import { advance } from "./continue-craft.js"
+import { advance, getDirections } from "./continue-craft.js"
 import { goalsClearlyDiffer, parseDesignMd } from "./start-craft.js"
 import { checkP0Rule } from "./validate-design.js"
 
@@ -61,6 +61,18 @@ describe("craft workflow", () => {
       design_system: "custom",
     })
     expect(output.design_preview).toContain("Your Brand")
+  })
+
+  it("prepends the detected project design system to direction choices", () => {
+    const directions = getDirections(baseState({
+      phase: "direction_choice",
+      project_design_system: "material-ui",
+    }))
+
+    expect(directions[0]).toMatchObject({
+      id: "project-material-ui",
+      design_system: "material-ui",
+    })
   })
 
   it("promotes only the first pending block after approval", async () => {
